@@ -59,10 +59,10 @@ Determine if the attached image contains **AI-generated content**. For YouTube/c
 
 **Output (strict)**
 Return **only one JSON object**:
-"{\"fake\":\"NN%\",\"reason\":\"...\"}"
+`{"fake":"NN%","reason":"..."}`
 
-* "\"fake\"": 0–100% (round to nearest 5).
-* "\"reason\"": **Korean only**, 1–3 concise sentences with concrete cues.
+* `"fake"`: 0–100% (round to nearest 5).
+* `"reason"`: **Korean only**, 1–3 concise sentences with concrete cues.
 
 **Hard rules**
 
@@ -336,7 +336,7 @@ class GeminiImageVerifier:
         *,
         model: str,
         thinking_budget: Optional[int] = -1,
-        image_size: str = "1K",
+        image_aspect_ratio: Optional[str] = None,
     ) -> None:
         api_keys = _discover_gemini_api_keys()
         self._client_pool = GeminiClientPool(api_keys)
@@ -355,8 +355,12 @@ class GeminiImageVerifier:
             "system_instruction": IMAGE_SYSTEM_INSTRUCTION,
             "response_schema": response_schema,
             "response_mime_type": "application/json",
-            "image_config": types.ImageConfig(image_size=image_size),
         }
+
+        if image_aspect_ratio:
+            config_kwargs["image_config"] = types.ImageConfig(
+                aspect_ratio=image_aspect_ratio
+            )
 
         if thinking_budget is not None:
             config_kwargs["thinking_config"] = types.ThinkingConfig(
@@ -439,10 +443,10 @@ def get_image_verifier() -> GeminiImageVerifier:
         )
         thinking_budget = -1
 
-    image_size = os.environ.get("GEMINI_IMAGE_SIZE", "1K")
+    image_aspect_ratio = os.environ.get("GEMINI_IMAGE_ASPECT_RATIO")
 
     return GeminiImageVerifier(
         model=model,
         thinking_budget=thinking_budget,
-        image_size=image_size,
+        image_aspect_ratio=image_aspect_ratio,
     )
