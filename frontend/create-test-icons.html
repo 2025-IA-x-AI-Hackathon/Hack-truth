@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>아이콘 생성기 - Fact Check Extension</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .instructions {
+        background: #e3f2fd;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border-left: 4px solid #2196f3;
+      }
+      .icon-preview {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin: 30px 0;
+        flex-wrap: wrap;
+      }
+      .icon-item {
+        text-align: center;
+      }
+      canvas {
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        display: block;
+        margin: 10px auto;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+        display: block;
+        margin: 10px auto;
+        font-weight: 600;
+        transition: transform 0.2s;
+      }
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+      .download-all {
+        background: #4caf50;
+        margin-top: 30px;
+      }
+      p {
+        color: #666;
+        line-height: 1.6;
+      }
+      .note {
+        background: #fff3cd;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 20px;
+        border-left: 4px solid #ffc107;
+        color: #856404;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 Fact Check 아이콘 생성기</h1>
+
+      <div class="instructions">
+        <h3>📋 사용 방법</h3>
+        <ol>
+          <li><strong>"모든 아이콘 생성" 버튼</strong>을 클릭합니다.</li>
+          <li>
+            각 아이콘 아래의 <strong>"다운로드"</strong> 버튼을 클릭하여
+            저장합니다.
+          </li>
+          <li>
+            다운로드한 파일을 프로젝트의 <code>icons/</code> 폴더에 복사합니다.
+          </li>
+          <li>
+            파일명을 정확히 맞춥니다: <code>icon16.png</code>,
+            <code>icon32.png</code>, <code>icon48.png</code>,
+            <code>icon128.png</code>
+          </li>
+        </ol>
+      </div>
+
+      <button class="download-all" onclick="generateAllIcons()">
+        🎨 모든 아이콘 생성
+      </button>
+
+      <div class="icon-preview" id="iconPreview"></div>
+
+      <div class="note">
+        <strong>⚠️ 참고:</strong> 이것은 테스트용 임시 아이콘입니다. 실제 배포
+        시에는 전문적인 디자인 도구(Figma, Canva 등)를 사용하여 더 나은 품질의
+        아이콘을 만드는 것을 권장합니다.
+      </div>
+    </div>
+
+    <script>
+      const SIZES = [16, 32, 48, 128];
+
+      const generateAllIcons = () => {
+        const previewContainer = document.getElementById("iconPreview");
+        previewContainer.innerHTML = "";
+
+        SIZES.forEach((size) => {
+          const iconItem = createIconItem(size);
+          previewContainer.appendChild(iconItem);
+        });
+      };
+
+      const createIconItem = (size) => {
+        const container = document.createElement("div");
+        container.className = "icon-item";
+
+        const label = document.createElement("p");
+        label.textContent = `${size}x${size}px`;
+        label.style.fontWeight = "600";
+        label.style.marginBottom = "10px";
+
+        const canvas = createIconCanvas(size);
+
+        const downloadBtn = document.createElement("button");
+        downloadBtn.textContent = "다운로드";
+        downloadBtn.onclick = () => downloadIcon(canvas, size);
+
+        container.appendChild(label);
+        container.appendChild(canvas);
+        container.appendChild(downloadBtn);
+
+        return container;
+      };
+
+      const createIconCanvas = (size) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+
+        // 그라데이션 배경
+        const gradient = ctx.createLinearGradient(0, 0, size, size);
+        gradient.addColorStop(0, "#667eea");
+        gradient.addColorStop(1, "#764ba2");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        // 둥근 모서리 효과
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.beginPath();
+        const radius = size * 0.2;
+        ctx.roundRect(0, 0, size, size, radius);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+
+        // 돋보기 아이콘 그리기
+        const centerX = size / 2;
+        const centerY = size / 2;
+        const circleRadius = size * 0.25;
+        const handleLength = size * 0.15;
+
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = size * 0.08;
+        ctx.lineCap = "round";
+
+        // 원 (렌즈)
+        ctx.beginPath();
+        ctx.arc(
+          centerX - size * 0.05,
+          centerY - size * 0.05,
+          circleRadius,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+
+        // 손잡이
+        ctx.beginPath();
+        const handleStartX = centerX + circleRadius * 0.6;
+        const handleStartY = centerY + circleRadius * 0.6;
+        ctx.moveTo(handleStartX, handleStartY);
+        ctx.lineTo(handleStartX + handleLength, handleStartY + handleLength);
+        ctx.stroke();
+
+        // 체크마크 (작은 크기에서는 생략)
+        if (size >= 48) {
+          ctx.strokeStyle = "white";
+          ctx.lineWidth = size * 0.06;
+          const checkSize = size * 0.12;
+          const checkX = centerX - size * 0.05 - checkSize * 0.3;
+          const checkY = centerY - size * 0.05;
+
+          ctx.beginPath();
+          ctx.moveTo(checkX - checkSize * 0.5, checkY);
+          ctx.lineTo(checkX - checkSize * 0.1, checkY + checkSize * 0.5);
+          ctx.lineTo(checkX + checkSize * 0.6, checkY - checkSize * 0.3);
+          ctx.stroke();
+        }
+
+        return canvas;
+      };
+
+      const downloadIcon = (canvas, size) => {
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.download = `icon${size}.png`;
+          link.href = url;
+          link.click();
+          URL.revokeObjectURL(url);
+        });
+      };
+
+      // 페이지 로드 시 자동 생성
+      window.addEventListener("load", generateAllIcons);
+    </script>
+  </body>
+</html>
