@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
+from uuid import UUID
 from urllib.parse import ParseResult, urlparse
 
 import httpx
@@ -21,8 +22,8 @@ from .gemini_service import (
     GeminiVerifier,
     get_verifier,
 )
-from .schemas import VerificationRequest, VerificationResponse, VerificationResult
-from .db import init_db_pool, close_db_pool, insert_verification_record
+from .schemas import VerificationRequest, VerificationResponse, VerificationResult, VerificationRecordDetail
+from .db import init_db_pool, close_db_pool, insert_verification_record, fetch_verification_record
 
 
 def _load_env() -> bool:
@@ -215,6 +216,45 @@ async def verify_text(
         result=result,
         record_id=record_id,
         raw_model_response=raw_response,
+    )
+
+
+@app.get(
+    "/verify/text/{record_id}",
+    response_model=VerificationRecordDetail,
+    tags=["verification"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_verification_record(record_id: UUID) -> VerificationRecordDetail:
+    logger.debug("Fetching verification record for id=%s", record_id)
+    try:
+        record = await fetch_verification_record(record_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch verification record with id=%s", record_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch verification record.",
+        ) from exc
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Verification record not found.",
+        )
+
+    result = VerificationResult(
+        accuracy=record["accuracy"],
+        accuracy_reason=record["accuracy_reason"] or "",
+        reason=record["reason"],
+        urls=record["urls"],
+    )
+
+    return VerificationRecordDetail(
+        record_id=record["id"],
+        input_text=record["input_text"],
+        result=result,
+        raw_model_response=record["raw_model_response"],
+        created_at=record["created_at"],
     )
 
 @app.post(

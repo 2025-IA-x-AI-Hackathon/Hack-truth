@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Optional
+from typing import Optional, Any, Dict
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -125,3 +125,54 @@ async def insert_verification_record(
         logger.debug("Persisted verification record with id=%s", record_id)
 
     return record_id
+
+
+async def fetch_verification_record(record_id: UUID) -> Optional[Dict[str, Any]]:
+    """Fetch a persisted verification result by its primary key."""
+    if _pool is None:
+        raise RuntimeError("Database pool has not been initialized. Call init_db_pool first.")
+
+    async with _pool.acquire() as conn:
+        record = await conn.fetchrow(
+            """
+            SELECT
+                id,
+                input_text,
+                accuracy,
+                accuracy_reason,
+                reason,
+                urls,
+                raw_model_response,
+                created_at
+            FROM verification_records
+            WHERE id = $1
+            """,
+            record_id,
+        )
+
+    if record is None:
+        return None
+
+    urls_value = record["urls"]
+    if urls_value is None:
+        urls_value = []
+    if isinstance(urls_value, str):
+        try:
+            urls_value = json.loads(urls_value)
+        except json.JSONDecodeError:
+            logger.warning("Stored URLs for record %s are not valid JSON; defaulting to [].", record_id)
+            urls_value = []
+    if not isinstance(urls_value, list):
+        logger.warning("Stored URLs for record %s are not a list; coerced to [].", record_id)
+        urls_value = []
+
+    return {
+        "id": record["id"],
+        "input_text": record["input_text"],
+        "accuracy": record["accuracy"],
+        "accuracy_reason": record["accuracy_reason"],
+        "reason": record["reason"],
+        "urls": urls_value,
+        "raw_model_response": record["raw_model_response"],
+        "created_at": record["created_at"],
+    }

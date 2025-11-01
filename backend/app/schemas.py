@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
@@ -39,6 +40,18 @@ class VerificationResponse(BaseModel):
         default=None,
         description="Raw JSON string returned by model, preserved for debugging.",
     )
+
+
+class VerificationRecordDetail(BaseModel):
+    """Stored verification record retrieved by record_id."""
+    record_id: UUID = Field(..., description="Primary key of the persisted verification record.")
+    input_text: str = Field(..., description="Original text that was verified.")
+    result: VerificationResult
+    raw_model_response: Optional[str] = Field(
+        default=None,
+        description="Raw JSON string returned by model, preserved for debugging.",
+    )
+    created_at: datetime = Field(..., description="Timestamp when the record was stored.")
 
 
 class ImageVerificationRequest(BaseModel):
@@ -84,6 +97,7 @@ __all__ = [
     "VerificationRequest",
     "VerificationResult",
     "VerificationResponse",
+    "VerificationRecordDetail",
     "ImageVerificationRequest",
     "ImageVerificationResult",
     "ImageVerificationResponse",
