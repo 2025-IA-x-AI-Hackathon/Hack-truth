@@ -84,12 +84,14 @@ class GeminiVerifier:
         config_kwargs = {
             "system_instruction": system_instruction or DEFAULT_SYSTEM_INSTRUCTION,
             "temperature": temperature,
-            "response_mime_type": "application/json",
             "response_schema": VerificationResult,
         }
 
         if tools:
             config_kwargs["tools"] = tools
+        else:
+            # Gemini currently forbids combining tools with a JSON-only response MIME type.
+            config_kwargs["response_mime_type"] = "application/json"
 
         if thinking_budget is not None:
             config_kwargs["thinking_config"] = types.ThinkingConfig(
@@ -122,15 +124,18 @@ class GeminiVerifier:
                 contents=contents,
                 config=self._generate_config,
             )
+            print("Gemini raw response:", response)
         except Exception as exc:  # noqa: BLE001 - expose raw error to caller with context
             logger.exception("Gemini API call failed")
             raise GeminiVerificationError(f"Gemini API call failed: {exc}") from exc
 
         raw_text = getattr(response, "text", None)
+        print("Gemini response text:", raw_text)
         logger.debug("Gemini usage metadata: %s", getattr(response, "usage_metadata", None))
 
         parsed = getattr(response, "parsed", None)
         if parsed:
+            print("Gemini parsed response:", parsed)
             logger.debug("Received structured response from Gemini")
             return self._coerce_verification_result(parsed), raw_text or json.dumps(parsed)
 
