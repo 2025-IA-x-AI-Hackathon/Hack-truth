@@ -3,6 +3,7 @@ import numpy as np
 from pytubefix import YouTube
 import math
 from playwright.sync_api import sync_playwright
+import subprocess
 import os
 import requests
 
@@ -14,21 +15,31 @@ def safe_float(x):
 # -----------------------------
 #  유튜브 영상 다운로드
 # -----------------------------
-def download_youtube_video(url, filename="video.mp4"):
-    # 현재 경로 기준, 항상 덮어쓰기
+def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"):
+    """
+    yt-dlp를 사용해서 유튜브 영상을 다운로드합니다.
+    - cookies_path: 로그인 상태 유지용 쿠키 파일
+    - filename: 현재 경로에 저장할 파일명 (덮어쓰기)
+    """
+    # 절대경로 변환
     filename = os.path.abspath(filename)
 
-    # YouTube 다운로드
-    yt = YouTube(url, 'WEB')
-    stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
-    
-    # output_path 없이 filename만 지정
-    stream.download(filename=filename)
-    
+    # yt-dlp 커맨드 생성
+    cmd = [
+        "yt-dlp",
+        "-4",  # IPv4 사용
+        "--cookies", cookies_path,
+        "-f", "b[ext=mp4]/b",  # mp4 포맷 우선
+        "-o", filename,
+        url
+    ]
+
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"영상 다운로드 실패: {e}")
+
     return filename
-
-
-
 
 # -----------------------------
 # 2️⃣ 프레임 샘플링
