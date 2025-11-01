@@ -1,16 +1,34 @@
 import cv2
 import numpy as np
 from pytubefix import YouTube
+import math
+import yt_dlp
+
+def safe_float(x):
+    if x is None or math.isnan(x) or math.isinf(x):
+        return 0.0
+    return float(x)
 
 # -----------------------------
 # 1️⃣ 유튜브 영상 다운로드
 # -----------------------------
 def download_youtube_video(url, filename="video.mp4"):
-    yt = YouTube(url)
-    stream = yt.streams.filter(file_extension="mp4", progressive=True).first()
-    stream.download(filename=filename)
+    ydl_opts = {
+        'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+        'outtmpl': filename,
+        'noplaylist': True,
+        'quiet': True,
+        'merge_output_format': 'mp4',  # 조각화 영상도 MP4로 병합
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                          'AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/118.0.0.0 Safari/537.36'
+        }
+        # 필요 시 'cookiefile': 'cookies.txt' 추가 가능
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
     return filename
-
 
 # -----------------------------
 # 2️⃣ 프레임 샘플링
@@ -43,6 +61,11 @@ def fft_artifact_score(frame):
     mask[center_h - radius:center_h + radius, center_w - radius:center_w + radius] = False
     high_freq_energy = np.sum(magnitude_spectrum[mask])
     total_energy = np.sum(magnitude_spectrum)
+        
+    # 0 나누기 방지
+    if total_energy == 0:
+        return 0.0
+
     score = high_freq_energy / total_energy
     return score
 
@@ -73,6 +96,10 @@ def predict_ai_video(fft_score, motion_score,
                      fft_threshold=0.6, motion_threshold=7.0):
     fft_flag = fft_score < fft_threshold
     motion_flag = motion_score < motion_threshold
+
+    # motion_score가 너무 낮으면 fft_flag와 상관없이 AI 생성 가능성 중간
+    if motion_score <= 4.59:
+        return "AI 생성 가능성 중간"
 
     if fft_flag and motion_flag:
         return "AI 생성 가능성 높음"

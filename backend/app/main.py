@@ -13,14 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .detectors.deepfake_detector import detect_deepfake_image_bytes, MODEL_NAME
 
-from .schemas import (
-    ImageVerificationRequest,
-    ImageVerificationResponse,
-    ImageVerificationResult,
-    VideoInput
-)
-
-from .check_video import download_youtube_video, sample_frames, analyze_fft, analyze_motion, predict_ai_video
+from .schemas import ImageVerificationResponse, ImageVerificationResult, VideoRequest, VideoResponse, ImageVerificationRequest
+from .check_video import download_youtube_video, sample_frames, analyze_fft, analyze_motion, predict_ai_video, safe_float
 from .gemini_service import (
     GeminiConfigurationError,
     GeminiVerificationError,
@@ -276,19 +270,29 @@ async def verify_image(
     )
     return ImageVerificationResponse(result=result)
 
-@app.post("/verify/video")
-def analyze_video(data: VideoInput):
+@app.post(
+        "/verify/video",
+        response_model=VideoResponse,
+        tags=["verification"],
+        status_code=status.HTTP_200_OK,
+)
+def analyze_video(data: VideoRequest):
     try:
         video_path = download_youtube_video(data.url)
         frames = sample_frames(video_path, sample_rate=30)
-        fft_score = analyze_fft(frames)
-        motion_score = analyze_motion(frames)
+        fft_score = safe_float(analyze_fft(frames))
+        motion_score = safe_float(analyze_motion(frames))
         result = predict_ai_video(fft_score, motion_score)
 
-        return {
-            "FFT_아티팩트_점수": fft_score,
-            "동작_패턴_점수": motion_score,
-            "판정_결과": result
-        }
+
+        return VideoResponse(
+            fft_artifact_score=str(fft_score),
+            action_pattern_score=str(motion_score),
+            result=result
+        )
     except Exception as e:
-        return {"error": str(e)}
+        return VideoResponse(
+            fft_artifact_score="0",
+            action_pattern_score="0",
+            result=f"분석 실패: {str(e)}"
+        )

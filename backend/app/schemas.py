@@ -80,5 +80,10 @@ __all__ = [
     "ImageVerificationResponse",
 ]
 
-class VideoInput(BaseModel):
+class VideoRequest(BaseModel):
     url: str
+
+class VideoResponse(BaseModel):
+    fft_artifact_score: str
+    action_pattern_score: str
+    result: str
