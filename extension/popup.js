@@ -11,6 +11,7 @@ const initializePopup = () => {
   loadFactCheckStatus();
   loadBackgroundDetectionStatus();
   loadApiUrl();
+  loadShareUrl();
   setupEventListeners();
 };
 
@@ -69,6 +70,17 @@ const loadApiUrl = () => {
   });
 };
 
+const loadShareUrl = () => {
+  chrome.storage.sync.get(["shareBaseUrl"], (result) => {
+    const shareUrlInput = document.getElementById("shareUrlInput");
+    if (shareUrlInput && typeof result.shareBaseUrl === "string") {
+      shareUrlInput.value = result.shareBaseUrl;
+    } else if (shareUrlInput) {
+      shareUrlInput.placeholder = "https://share.example.com";
+    }
+  });
+};
+
 // 이벤트 리스너 설정
 const setupEventListeners = () => {
   const toggle = document.getElementById("factCheckToggle");
@@ -76,6 +88,7 @@ const setupEventListeners = () => {
     "backgroundDetectionToggle"
   );
   const saveApiUrlBtn = document.getElementById("saveApiUrlBtn");
+  const saveShareUrlBtn = document.getElementById("saveShareUrlBtn");
 
   if (toggle) {
     toggle.addEventListener("change", handleToggleChange);
@@ -92,12 +105,25 @@ const setupEventListeners = () => {
     saveApiUrlBtn.addEventListener("click", handleSaveApiUrl);
   }
 
+  if (saveShareUrlBtn) {
+    saveShareUrlBtn.addEventListener("click", handleSaveShareUrl);
+  }
+
   // Enter 키로 저장
   const apiUrlInput = document.getElementById("apiUrlInput");
   if (apiUrlInput) {
     apiUrlInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter") {
         handleSaveApiUrl();
+      }
+    });
+  }
+
+  const shareUrlInput = document.getElementById("shareUrlInput");
+  if (shareUrlInput) {
+    shareUrlInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        handleSaveShareUrl();
       }
     });
   }
@@ -219,6 +245,44 @@ const handleSaveApiUrl = () => {
 // API URL 상태 메시지 표시
 const showApiUrlStatus = (message, type) => {
   const status = document.getElementById("apiUrlStatus");
+  if (!status) return;
+
+  status.textContent = message;
+  status.className = `api-url-status ${type}`;
+
+  setTimeout(() => {
+    status.textContent = "";
+    status.className = "api-url-status";
+  }, 3000);
+};
+
+const handleSaveShareUrl = () => {
+  const shareUrlInput = document.getElementById("shareUrlInput");
+  const status = document.getElementById("shareUrlStatus");
+
+  if (!shareUrlInput || !status) return;
+
+  const shareUrl = shareUrlInput.value.trim();
+
+  if (!shareUrl) {
+    showShareUrlStatus("Share URL을 입력해주세요", "error");
+    return;
+  }
+
+  try {
+    new URL(shareUrl);
+  } catch (e) {
+    showShareUrlStatus("올바른 URL 형식이 아닙니다", "error");
+    return;
+  }
+
+  chrome.storage.sync.set({ shareBaseUrl: shareUrl }, () => {
+    showShareUrlStatus("저장되었습니다!", "success");
+  });
+};
+
+const showShareUrlStatus = (message, type) => {
+  const status = document.getElementById("shareUrlStatus");
   if (!status) return;
 
   status.textContent = message;
