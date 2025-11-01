@@ -129,7 +129,7 @@ class GeminiVerifier:
         self,
         *,
         model: str,
-        temperature: float = 0.9,
+        temperature: float = 0.2,
         enable_google_search: bool = True,
         thinking_budget: Optional[int] = -1,
         system_instruction: Optional[str] = None,
