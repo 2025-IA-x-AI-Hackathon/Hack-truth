@@ -87,9 +87,6 @@ def detect_deepfake_image_bytes(file_bytes: bytes) -> dict:
             "이미지 판별 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
         )
     finally:
-        if "processed_image" in locals():
+        if "processed_image" in locals() and processed_image is not image:
             processed_image.close()
-            if processed_image is not image:
-                image.close()
-        else:
-            image.close()
+        image.close()
