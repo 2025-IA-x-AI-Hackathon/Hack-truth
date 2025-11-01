@@ -60,8 +60,13 @@ const handlePageButtonClick = (platform) => {
   // 버튼 숨기기
   hidePageButton();
 
+  const currentUrl = window.location.href;
+
   // URL 오버레이 표시
-  showUrlOverlay(window.location.href, platform);
+  showUrlOverlay(currentUrl, platform);
+
+  // 영상 팩트 체크 요청
+  requestVideoFactCheck(currentUrl, platform);
 };
 
 // 기존 버튼 제거
@@ -118,16 +123,11 @@ const showUrlOverlay = (url, platform) => {
 
   document.body.appendChild(overlay);
 
-  // 백그라운드 감지 로딩 애니메이션 위치 조정
-  updateBackgroundDetectionLoadingPosition();
-
   // 닫기 버튼 이벤트 리스너
   const closeBtn = document.getElementById("closeUrlOverlay");
   closeBtn.addEventListener("click", () => {
     removeUrlOverlay();
     showPageButtonAgain();
-    // 닫힌 후에도 위치 조정
-    updateBackgroundDetectionLoadingPosition();
   });
 };
 
@@ -137,6 +137,44 @@ const removeUrlOverlay = () => {
   if (overlay) {
     overlay.remove();
   }
+};
+
+// 영상 팩트 체크 요청
+const requestVideoFactCheck = (url, platform) => {
+  const requestData = { url, platform };
+
+  console.log("========== Video Fact Check Request (Content) ==========");
+  console.log("Request Body:", JSON.stringify(requestData, null, 2));
+  console.log("========================================================");
+
+  chrome.runtime.sendMessage(
+    {
+      type: "REQUEST_VIDEO_FACT_CHECK",
+      data: requestData,
+    },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "Video fact check request error:",
+          chrome.runtime.lastError
+        );
+        removeUrlOverlay();
+        showPageButtonAgain();
+        return;
+      }
+
+      console.log(
+        "========== Video Fact Check Response (Content) =========="
+      );
+      console.log("Response Body:", JSON.stringify(response, null, 2));
+      console.log("=========================================================");
+
+      if (!response || !response.success) {
+        removeUrlOverlay();
+        showPageButtonAgain();
+      }
+    }
+  );
 };
 
 // 페이지 로드 시 초기화는 아래에서 처리
@@ -153,14 +191,9 @@ const showFactCheckPopup = (data) => {
   document.body.appendChild(popup);
   console.log("Popup added to DOM");
 
-  // 백그라운드 감지 로딩 애니메이션 위치 조정
-  updateBackgroundDetectionLoadingPosition();
-
   // 자동으로 닫히도록 설정 (3초 후)
   setTimeout(() => {
     removeExistingPopup();
-    // 닫힌 후에도 위치 조정
-    updateBackgroundDetectionLoadingPosition();
   }, 3000);
 };
 
@@ -229,16 +262,11 @@ const showLoadingOverlay = (message) => {
   `;
 
   document.body.appendChild(overlay);
-
-  // 백그라운드 감지 로딩 애니메이션 위치 조정
-  updateBackgroundDetectionLoadingPosition();
 };
 
 // 로딩 오버레이 제거
 const hideLoadingOverlay = () => {
   removeLoadingOverlay();
-  // 제거 후에도 위치 조정
-  updateBackgroundDetectionLoadingPosition();
 };
 
 const removeLoadingOverlay = () => {
@@ -357,105 +385,257 @@ const escapeHtml = (text) => {
   return div.innerHTML;
 };
 
-// ==================== 백그라운드 감지 기능 ====================
+// 영상 팩트 체크 결과 모달 표시
+const showVideoResultModal = (data) => {
+  removeResultModal();
 
-// 현재 페이지 URL 추적
-let currentPageUrl = window.location.href;
-let lastCheckedUrl = null;
-let isScrolling = false;
-let scrollTimeout = null;
-let isChecking = false;
+  const modal = document.createElement("div");
+  modal.id = "fact-check-result-modal";
+  modal.className = "fact-check-result-modal video";
 
-// Debounce 함수
-const debounce = (func, delay) => {
-  let timeoutId;
-  return (...args) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => func(...args), delay);
-  };
+  const platformName =
+    data?.platform === "youtube"
+      ? "YouTube"
+      : data?.platform === "instagram"
+      ? "Instagram"
+      : "Video";
+
+  const summaryText = data?.result
+    ? escapeHtml(data.result)
+    : "영상 분석 결과를 불러오지 못했습니다.";
+
+  const detailText =
+    data?.rawResponse?.detail ||
+    data?.rawResponse?.description ||
+    data?.rawResponse?.summary ||
+    "";
+
+  const referencesRaw =
+    data?.rawResponse?.references ||
+    data?.rawResponse?.reference_urls ||
+    data?.rawResponse?.urls ||
+    [];
+
+  const references = Array.isArray(referencesRaw)
+    ? referencesRaw
+    : typeof referencesRaw === "string" && referencesRaw.length > 0
+    ? [referencesRaw]
+    : [];
+
+  modal.innerHTML = `
+    <div class="modal-backdrop" onclick="document.getElementById('fact-check-result-modal').remove()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🎬 ${platformName} 영상 팩트 체크 결과</h2>
+        <button class="modal-close-btn" onclick="document.getElementById('fact-check-result-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="result-section">
+          <h3>결과 요약</h3>
+          <p class="video-result-summary">${summaryText}</p>
+        </div>
+
+        <div class="result-section">
+          <h3>신뢰 지표</h3>
+          <div class="video-score-grid">
+            <div class="video-score-card">
+              <span class="score-label">FFT Artifact Score</span>
+              <span class="score-value">${escapeHtml(
+                data?.fftArtifactScore ?? "-"
+              )}</span>
+            </div>
+            <div class="video-score-card">
+              <span class="score-label">Action Pattern Score</span>
+              <span class="score-value">${escapeHtml(
+                data?.actionPatternScore ?? "-"
+              )}</span>
+            </div>
+          </div>
+        </div>
+
+        ${
+          detailText
+            ? `
+        <div class="result-section">
+          <h3>상세 설명</h3>
+          <p class="video-detail-text">${escapeHtml(detailText)}</p>
+        </div>
+        `
+            : ""
+        }
+
+        ${
+          references.length > 0
+            ? `
+        <div class="result-section">
+          <h3>참고 레퍼런스</h3>
+          <ul class="reference-list">
+            ${references
+              .map(
+                (ref) =>
+                  `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`
+              )
+              .join("")}
+          </ul>
+        </div>
+        `
+            : ""
+        }
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
 };
 
-// 현재 화면에 보이는 텍스트 추출
-const getVisibleText = () => {
-  const viewportHeight = window.innerHeight;
-  const viewportWidth = window.innerWidth;
-  const textElements = [];
-  const walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
+// ==================== 백그라운드 감지 기능 ====================
+
+// 상태 추적
+let currentPageUrl = window.location.href;
+let isChecking = false;
+let hasCheckedCurrentPage = false;
+let autoFactCheckTimeoutId = null;
+let isBackgroundDetectionEnabled = true;
+let isGlobalFactCheckEnabled = true;
+
+const applyBackgroundDetectionSetting = (enabled) => {
+  isBackgroundDetectionEnabled = enabled;
+
+  if (!enabled) {
+    console.log("Background detection disabled via settings");
+    hasCheckedCurrentPage = true;
+    if (autoFactCheckTimeoutId) {
+      clearTimeout(autoFactCheckTimeoutId);
+      autoFactCheckTimeoutId = null;
+    }
+    isChecking = false;
+    removeBackgroundDetectionLoading();
+  } else {
+    console.log("Background detection enabled via settings");
+    hasCheckedCurrentPage = false;
+    scheduleAutoFactCheck(500);
+  }
+};
+
+const applyGlobalFactCheckSetting = (enabled) => {
+  isGlobalFactCheckEnabled = enabled;
+
+  if (!enabled) {
+    console.log("Global fact check disabled via settings");
+    hasCheckedCurrentPage = true;
+    if (autoFactCheckTimeoutId) {
+      clearTimeout(autoFactCheckTimeoutId);
+      autoFactCheckTimeoutId = null;
+    }
+    isChecking = false;
+    removeBackgroundDetectionLoading();
+  } else {
+    console.log("Global fact check enabled via settings");
+    hasCheckedCurrentPage = false;
+    scheduleAutoFactCheck(500);
+  }
+};
+
+const loadBackgroundDetectionSetting = () => {
+  chrome.storage.sync.get(
+    ["isBackgroundDetectionEnabled", "isFactCheckEnabled"],
+    (result) => {
+      const backgroundEnabled =
+        typeof result.isBackgroundDetectionEnabled === "boolean"
+          ? result.isBackgroundDetectionEnabled
+          : true;
+      const factCheckEnabled =
+        typeof result.isFactCheckEnabled === "boolean"
+          ? result.isFactCheckEnabled
+          : true;
+
+      applyGlobalFactCheckSetting(factCheckEnabled);
+      applyBackgroundDetectionSetting(backgroundEnabled);
+    }
   );
+};
 
-  let node;
-  while ((node = walker.nextNode())) {
-    const parentElement = node.parentElement;
-    if (!parentElement) continue;
-
-    const rect = parentElement.getBoundingClientRect();
-    const style = window.getComputedStyle(parentElement);
-
-    // 보이지 않는 요소 제외
-    if (
-      style.display === "none" ||
-      style.visibility === "hidden" ||
-      style.opacity === "0" ||
-      rect.height === 0 ||
-      rect.width === 0
-    ) {
-      continue;
-    }
-
-    // 뷰포트 내에 있는 텍스트만 추출
-    if (
-      rect.top < viewportHeight &&
-      rect.bottom > 0 &&
-      rect.left < viewportWidth &&
-      rect.right > 0
-    ) {
-      const text = node.textContent.trim();
-      if (text.length > 0) {
-        textElements.push(text);
-      }
-    }
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync") {
+    return;
   }
 
-  // 텍스트를 합치고 정리
-  let visibleText = textElements.join(" ").replace(/\s+/g, " ").trim();
+  if (Object.prototype.hasOwnProperty.call(changes, "isBackgroundDetectionEnabled")) {
+    const newValue = changes.isBackgroundDetectionEnabled.newValue;
+    const enabled =
+      typeof newValue === "boolean" ? newValue : true;
+    applyBackgroundDetectionSetting(enabled);
+  }
 
-  // 최소 길이 체크 (너무 짧은 텍스트는 제외)
-  if (visibleText.length < 50) {
+  if (Object.prototype.hasOwnProperty.call(changes, "isFactCheckEnabled")) {
+    const newValue = changes.isFactCheckEnabled.newValue;
+    const enabled =
+      typeof newValue === "boolean" ? newValue : true;
+    applyGlobalFactCheckSetting(enabled);
+  }
+});
+
+const scheduleAutoFactCheck = (delay = 2000) => {
+  if (!isBackgroundDetectionEnabled || !isGlobalFactCheckEnabled) {
+    return;
+  }
+  if (hasCheckedCurrentPage || isChecking) {
+    return;
+  }
+
+  if (autoFactCheckTimeoutId) {
+    clearTimeout(autoFactCheckTimeoutId);
+  }
+
+  autoFactCheckTimeoutId = setTimeout(() => {
+    autoFactCheckTimeoutId = null;
+    requestAutoFactCheck();
+  }, delay);
+};
+
+// 페이지 전체 텍스트 추출
+const getPageText = () => {
+  const text = document.body ? document.body.innerText : "";
+  if (!text) {
     return null;
   }
 
-  // 최대 길이 제한 (API 요청 최적화)
-  if (visibleText.length > 5000) {
-    visibleText = visibleText.substring(0, 5000);
+  let normalizedText = text.replace(/\s+/g, " ").trim();
+
+  if (normalizedText.length < 50) {
+    return null;
   }
 
-  return visibleText;
+  if (normalizedText.length > 5000) {
+    normalizedText = normalizedText.substring(0, 5000);
+  }
+
+  return normalizedText;
 };
 
 // 자동 Fact Check 요청
-const requestAutoFactCheck = async () => {
-  // 이미 체크 중이면 스킵
-  if (isChecking) {
+const requestAutoFactCheck = () => {
+  if (!isBackgroundDetectionEnabled || !isGlobalFactCheckEnabled) {
+    console.log("Auto fact check disabled by settings, skipping request");
     return;
   }
 
-  const visibleText = getVisibleText();
-  if (!visibleText) {
+  if (isChecking || hasCheckedCurrentPage) {
     return;
   }
 
-  // 현재 페이지 URL 업데이트
+  const pageText = getPageText();
+  if (!pageText) {
+    hasCheckedCurrentPage = true;
+    return;
+  }
+
   currentPageUrl = window.location.href;
-
   isChecking = true;
-  lastCheckedUrl = currentPageUrl;
+  hasCheckedCurrentPage = true;
 
   const requestData = {
-    text: visibleText,
+    text: pageText,
     url: currentPageUrl,
   };
 
@@ -463,10 +643,8 @@ const requestAutoFactCheck = async () => {
   console.log("Request Body:", JSON.stringify(requestData, null, 2));
   console.log("======================================================");
 
-  // 백그라운드 감지 로딩 애니메이션 표시
   showBackgroundDetectionLoading();
 
-  // Background script에 자동 fact check 요청 전송
   chrome.runtime.sendMessage(
     {
       type: "AUTO_FACT_CHECK_TEXT",
@@ -478,37 +656,18 @@ const requestAutoFactCheck = async () => {
       console.log("Response Body:", JSON.stringify(response, null, 2));
       console.log("=======================================================");
 
-      // 백그라운드 감지 로딩 애니메이션 제거
       removeBackgroundDetectionLoading();
 
       if (chrome.runtime.lastError) {
         console.error("Auto fact check error:", chrome.runtime.lastError);
         return;
       }
-      // 응답 처리 (background.js에서 처리)
+
+      if (response && response.success && response.data && response.data.skipped) {
+        console.log("Auto fact check skipped:", response.data);
+      }
     }
   );
-};
-
-const handleScrollStop = debounce(() => {
-  isScrolling = false;
-  requestAutoFactCheck();
-}, 300);
-
-const handleScroll = () => {
-  isScrolling = true;
-  handleScrollStop();
-};
-
-// 스크롤 감지 초기화
-const initializeScrollDetection = () => {
-  window.addEventListener("scroll", handleScroll, { passive: true });
-
-  setTimeout(() => {
-    if (!isScrolling) {
-      requestAutoFactCheck();
-    }
-  }, 2000); // 페이지 로드 후 2초 대기
 };
 
 // 경고 오버레이 표시
@@ -536,24 +695,17 @@ const showWarningOverlay = (isCurrentPage, url) => {
 
   document.body.appendChild(overlay);
 
-  // 백그라운드 감지 로딩 애니메이션 위치 조정
-  updateBackgroundDetectionLoadingPosition();
-
   // 닫기 버튼 이벤트 리스너
   const closeBtn = document.getElementById("closeWarningOverlay");
   if (closeBtn) {
     closeBtn.addEventListener("click", () => {
       removeWarningOverlay();
-      // 닫힌 후에도 위치 조정
-      updateBackgroundDetectionLoadingPosition();
     });
   }
 
   // 10초 후 자동 닫기
   setTimeout(() => {
     removeWarningOverlay();
-    // 닫힌 후에도 위치 조정
-    updateBackgroundDetectionLoadingPosition();
   }, 10000);
 };
 
@@ -593,9 +745,6 @@ const showBackgroundDetectionLoading = () => {
   `;
 
   document.body.appendChild(loadingOverlay);
-
-  // 다른 오버레이가 있는지 확인하고 위치 조정
-  updateBackgroundDetectionLoadingPosition();
 };
 
 // 백그라운드 감지 로딩 애니메이션 제거
@@ -606,54 +755,6 @@ const removeBackgroundDetectionLoading = () => {
   if (loadingOverlay) {
     loadingOverlay.remove();
   }
-};
-
-// 백그라운드 감지 로딩 애니메이션 위치 조정
-const updateBackgroundDetectionLoadingPosition = () => {
-  const loadingOverlay = document.getElementById(
-    "fact-check-background-detection-loading"
-  );
-  if (!loadingOverlay) {
-    return;
-  }
-
-  const isOverlayVisible = (overlay) => {
-    if (!overlay) {
-      return false;
-    }
-
-    const style = window.getComputedStyle(overlay);
-    if (
-      style.display === "none" ||
-      style.visibility === "hidden" ||
-      parseFloat(style.opacity) === 0
-    ) {
-      return false;
-    }
-
-    const rect = overlay.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  };
-
-  // 다른 오버레이들의 높이를 계산
-  let offset = 0;
-  const overlays = [
-    document.getElementById("fact-check-popup"),
-    document.getElementById("fact-check-url-overlay"),
-    document.getElementById("fact-check-loading-overlay"),
-    document.getElementById("fact-check-warning-overlay"),
-    document.getElementById("fact-check-api-url-warning-overlay"),
-    document.getElementById("fact-check-realtime-detection-overlay"),
-  ];
-
-  overlays.forEach((overlay) => {
-    if (isOverlayVisible(overlay)) {
-      const rect = overlay.getBoundingClientRect();
-      offset += rect.height + 10; // 오버레이 높이 + 간격
-    }
-  });
-
-  loadingOverlay.style.bottom = `${20 + offset}px`;
 };
 
 // API URL 경고 오버레이 표시
@@ -676,25 +777,17 @@ const showApiUrlWarningOverlay = (message) => {
   `;
 
   document.body.appendChild(overlay);
-
-  // 백그라운드 감지 로딩 애니메이션 위치 조정
-  updateBackgroundDetectionLoadingPosition();
-
   // 닫기 버튼 이벤트 리스너
   const closeBtn = document.getElementById("closeApiUrlWarningOverlay");
   if (closeBtn) {
     closeBtn.addEventListener("click", () => {
       removeApiUrlWarningOverlay();
-      // 닫힌 후에도 위치 조정
-      updateBackgroundDetectionLoadingPosition();
     });
   }
 
   // 10초 후 자동 닫기
   setTimeout(() => {
     removeApiUrlWarningOverlay();
-    // 닫힌 후에도 위치 조정
-    updateBackgroundDetectionLoadingPosition();
   }, 10000);
 };
 
@@ -720,19 +813,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "SHOW_RESULT_MODAL") {
     hideLoadingOverlay();
     showResultModal(request.data);
-    // 결과 모달 표시 후에도 위치 조정
-    updateBackgroundDetectionLoadingPosition();
   } else if (request.type === "SHOW_ERROR") {
     hideLoadingOverlay();
     showErrorModal(request.data);
-    // 에러 모달 표시 후에도 위치 조정
-    updateBackgroundDetectionLoadingPosition();
   } else if (request.type === "SHOW_WARNING_OVERLAY") {
     const { isCurrentPage, url } = request.data;
     showWarningOverlay(isCurrentPage, url);
   } else if (request.type === "SHOW_API_URL_WARNING") {
     hideLoadingOverlay();
     showApiUrlWarningOverlay(request.data.message);
+  } else if (request.type === "SHOW_VIDEO_RESULT_MODAL") {
+    hideLoadingOverlay();
+    removeUrlOverlay();
+    showVideoResultModal(request.data);
+    showPageButtonAgain();
   }
 });
 
@@ -748,20 +842,24 @@ setInterval(() => {
     removeWarningOverlay();
     removeRealtimeDetectionOverlay();
     removeApiUrlWarningOverlay();
-    // 스크롤 감지 재초기화
+    removeBackgroundDetectionLoading();
+    // 상태 초기화
     isChecking = false;
+    hasCheckedCurrentPage = false;
+    loadBackgroundDetectionSetting();
     // 새로운 페이지에 맞는 버튼 표시
     initializePageSpecificButtons();
+    scheduleAutoFactCheck(800);
   }
 }, 1000);
 
-// 페이지 로드 시 스크롤 감지 초기화
+// 초기화
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     initializePageSpecificButtons();
-    initializeScrollDetection();
+    loadBackgroundDetectionSetting();
   });
 } else {
   initializePageSpecificButtons();
-  initializeScrollDetection();
+  loadBackgroundDetectionSetting();
 }

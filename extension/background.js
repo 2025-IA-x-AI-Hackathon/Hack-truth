@@ -21,8 +21,24 @@ const getApiBaseUrl = async () => {
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Fact Check extension installed");
 
-  // 초기 상태를 storage에 저장
-  chrome.storage.sync.set({ isFactCheckEnabled: true });
+  chrome.storage.sync.get(
+    ["isFactCheckEnabled", "isBackgroundDetectionEnabled"],
+    (result) => {
+      const updates = {};
+
+      if (typeof result.isFactCheckEnabled !== "boolean") {
+        updates.isFactCheckEnabled = true;
+      }
+
+      if (typeof result.isBackgroundDetectionEnabled !== "boolean") {
+        updates.isBackgroundDetectionEnabled = true;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        chrome.storage.sync.set(updates);
+      }
+    }
+  );
 
   // 컨텍스트 메뉴 생성
   createContextMenus();
@@ -345,10 +361,28 @@ const handleAutoFactCheck = async (text, url, tabId) => {
   console.log("==============================================");
 
   // Storage에서 활성화 상태 확인
-  const storage = await chrome.storage.sync.get(["isFactCheckEnabled"]);
-  if (!storage.isFactCheckEnabled) {
-    console.log("Auto fact check is disabled");
-    throw new Error("Auto fact check is disabled");
+  const storage = await chrome.storage.sync.get([
+    "isFactCheckEnabled",
+    "isBackgroundDetectionEnabled",
+  ]);
+
+  const factCheckEnabled =
+    typeof storage.isFactCheckEnabled === "boolean"
+      ? storage.isFactCheckEnabled
+      : true;
+  const backgroundDetectionEnabled =
+    typeof storage.isBackgroundDetectionEnabled === "boolean"
+      ? storage.isBackgroundDetectionEnabled
+      : true;
+
+  if (!factCheckEnabled) {
+    console.log("Auto fact check skipped: fact check is disabled");
+    return { skipped: true, reason: "fact_check_disabled" };
+  }
+
+  if (!backgroundDetectionEnabled) {
+    console.log("Auto fact check skipped: background detection is disabled");
+    return { skipped: true, reason: "background_detection_disabled" };
   }
 
   // API URL 가져오기
@@ -452,9 +486,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log("=======================================================");
 
   if (request.type === "TOGGLE_FACT_CHECK") {
-    isFactCheckEnabled = request.enabled;
-    chrome.storage.sync.set({ isFactCheckEnabled: request.enabled });
-    sendResponse({ success: true });
+    const enabled = !!request.enabled;
+    isFactCheckEnabled = enabled;
+    chrome.storage.sync.set({ isFactCheckEnabled: enabled }, () => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "Failed to persist fact check toggle:",
+          chrome.runtime.lastError.message
+        );
+      }
+      sendResponse({ success: true, enabled });
+    });
+    return true;
   } else if (request.type === "GET_FACT_CHECK_STATUS") {
     chrome.storage.sync.get(["isFactCheckEnabled"], (result) => {
       console.log("========== Fact Check Status Response ==========");
@@ -466,6 +509,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ enabled: result.isFactCheckEnabled ?? true });
     });
     return true; // 비동기 응답을 위해 true 반환
+  } else if (request.type === "TOGGLE_BACKGROUND_DETECTION") {
+    const enabled = !!request.enabled;
+    chrome.storage.sync.set(
+      { isBackgroundDetectionEnabled: enabled },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "Failed to persist background detection toggle:",
+            chrome.runtime.lastError.message
+          );
+          sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+
+        sendResponse({ success: true, enabled });
+      }
+    );
+    return true;
+  } else if (request.type === "GET_BACKGROUND_DETECTION_STATUS") {
+    chrome.storage.sync.get(["isBackgroundDetectionEnabled"], (result) => {
+      const enabled =
+        typeof result.isBackgroundDetectionEnabled === "boolean"
+          ? result.isBackgroundDetectionEnabled
+          : true;
+      sendResponse({ enabled });
+    });
+    return true;
   } else if (request.type === "API_URL_UPDATED") {
     console.log("API URL updated:", request.apiUrl);
     sendResponse({ success: true });
@@ -480,17 +550,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     const { text, url } = request.data;
 
-    // 비동기 처리 시작
-  handleAutoFactCheck(text, url, tabId)
-    .then((responseData) => {
-      console.log("========== Auto Fact Check Complete Response ==========");
-      console.log(
-        "Response Body:",
-        JSON.stringify({ success: true, data: responseData }, null, 2)
-      );
-      console.log("========================================================");
-      sendResponse({ success: true, data: responseData });
-    })
+    handleAutoFactCheck(text, url, tabId)
+      .then((responseData) => {
+        console.log("========== Auto Fact Check Complete Response ==========");
+        console.log(
+          "Response Body:",
+          JSON.stringify({ success: true, data: responseData }, null, 2)
+        );
+        console.log("========================================================");
+        sendResponse({ success: true, data: responseData });
+      })
       .catch((error) => {
         console.error("========== Auto Fact Check Error Response ==========");
         console.error(
@@ -501,7 +570,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       });
 
-    // 비동기 응답을 위해 true 반환 (중요!)
+    return true; // 비동기 응답을 위해 true 반환 (중요!)
+  } else if (request.type === "REQUEST_VIDEO_FACT_CHECK") {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      console.error("No tab ID found for video fact check");
+      sendResponse({ success: false, error: "Tab ID not found" });
+      return;
+    }
+
+    const { url, platform } = request.data || {};
+
+    handleVideoFactCheck(url, platform, tabId)
+      .then((payload) => {
+        console.log("========== Video Fact Check Complete ==========");
+        console.log("Response Body:", JSON.stringify(payload, null, 2));
+        console.log("===============================================");
+        sendResponse({ success: true, data: payload });
+      })
+      .catch((error) => {
+        console.error("========== Video Fact Check Error Response ==========");
+        console.error(
+          "Response Body:",
+          JSON.stringify({ success: false, error: error.message }, null, 2)
+        );
+        console.error("=====================================================");
+        sendResponse({ success: false, error: error.message });
+      });
+
     return true;
   }
 });

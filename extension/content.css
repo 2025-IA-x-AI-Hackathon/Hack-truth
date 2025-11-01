@@ -635,11 +635,11 @@
   line-height: 1.4;
 }
 
-/* 백그라운드 감지 로딩 애니메이션 스타일 (우측 하단) */
+/* 백그라운드 감지 로딩 애니메이션 스타일 (좌측 하단) */
 .fact-check-background-detection-loading {
   position: fixed;
   bottom: 20px;
-  right: 20px;
+  left: 20px;
   z-index: 999998;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(10px);
@@ -673,7 +673,7 @@
 .background-detection-loading-tooltip {
   position: absolute;
   bottom: 100%;
-  right: 0;
+  left: 0;
   margin-bottom: 8px;
   padding: 8px 12px;
   background: rgba(0, 0, 0, 0.85);
@@ -694,7 +694,7 @@
   content: "";
   position: absolute;
   top: 100%;
-  right: 16px;
+  left: 16px;
   border: 6px solid transparent;
   border-top-color: rgba(0, 0, 0, 0.85);
 }
