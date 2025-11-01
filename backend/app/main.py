@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import ParseResult, urlparse
 
 import httpx
@@ -53,6 +53,8 @@ if _env_loaded:
     logger.debug("Loaded environment variables from .env file")
 else:
     logger.debug("No .env file found; relying on process environment")
+
+GEMINI_MAX_ATTEMPTS = max(1, int(os.environ.get("GEMINI_VERIFICATION_ATTEMPTS", "2")))
 
 app = FastAPI(
     title="HackTruth Backend",
@@ -140,20 +142,47 @@ async def verify_text(
 ) -> VerificationResponse:
     logger.debug("Received verification request: %s", payload)
 
-    try:
-        result, raw_response = await run_in_threadpool(verifier.verify, payload.text)
-    except GeminiConfigurationError as exc:
-        logger.exception("Gemini configuration error")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except GeminiVerificationError as exc:
-        logger.exception("Gemini verification failed")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 - want full traceback in logs
-        logger.exception("Unexpected verification failure")
+    result: Optional[VerificationResult] = None
+    raw_response: Optional[str] = None
+
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            result, raw_response = await run_in_threadpool(verifier.verify, payload.text)
+            break
+        except GeminiConfigurationError as exc:
+            logger.exception("Gemini configuration error on attempt %d", attempt)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GeminiVerificationError as exc:
+            logger.warning(
+                "Gemini verification attempt %d/%d failed: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc,
+            )
+            if attempt == GEMINI_MAX_ATTEMPTS:
+                logger.exception("Gemini verification failed after retries")
+                raise HTTPException(
+                    status_code=502,
+                    detail="Gemini verification failed after multiple attempts.",
+                ) from exc
+        except Exception as exc:  # noqa: BLE001 - want full traceback in logs
+            logger.exception("Unexpected verification failure on attempt %d", attempt)
+            raise HTTPException(
+                status_code=500,
+                detail="Unexpected error while verifying the text.",
+            ) from exc
+
+    if result is None:
+        logger.error(
+            "Gemini verification did not produce a result after %d attempts",
+            GEMINI_MAX_ATTEMPTS,
+        )
         raise HTTPException(
             status_code=500,
-            detail="Unexpected error while verifying the text.",
-        ) from exc
+            detail="Verification failed without a usable response.",
+        )
+    if raw_response is None:
+        logger.warning("Gemini verification returned no raw response payload")
 
     if not isinstance(result, VerificationResult):
         # This should never trigger thanks to validation, but log defensively.
