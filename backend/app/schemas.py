@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
 # ===== 텍스트 판별용 (기존 유지) =====
@@ -13,6 +15,10 @@ class VerificationResult(BaseModel):
         ...,
         description="Model confidence expressed as a percentage string, e.g. '82%'.",
     )
+    accuracy_reason: str = Field(
+        ...,
+        description="Short Korean explanation describing why the given accuracy score was selected.",
+    )
     reason: str = Field(
         ...,
         description="Short explanation for the assessment.",
@@ -26,10 +32,26 @@ class VerificationResult(BaseModel):
 class VerificationResponse(BaseModel):
     """HTTP response returned to the frontend."""
     result: VerificationResult
+    record_id: UUID = Field(
+        ...,
+        description="Primary key of the persisted verification record.",
+    )
     raw_model_response: Optional[str] = Field(
         default=None,
         description="Raw JSON string returned by model, preserved for debugging.",
     )
+
+
+class VerificationRecordDetail(BaseModel):
+    """Stored verification record retrieved by record_id."""
+    record_id: UUID = Field(..., description="Primary key of the persisted verification record.")
+    input_text: str = Field(..., description="Original text that was verified.")
+    result: VerificationResult
+    raw_model_response: Optional[str] = Field(
+        default=None,
+        description="Raw JSON string returned by model, preserved for debugging.",
+    )
+    created_at: datetime = Field(..., description="Timestamp when the record was stored.")
 
 
 class ImageVerificationRequest(BaseModel):
@@ -75,6 +97,7 @@ __all__ = [
     "VerificationRequest",
     "VerificationResult",
     "VerificationResponse",
+    "VerificationRecordDetail",
     "ImageVerificationRequest",
     "ImageVerificationResult",
     "ImageVerificationResponse",

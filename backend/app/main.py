@@ -2,7 +2,8 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+from uuid import UUID
 from urllib.parse import ParseResult, urlparse
 
 import httpx
@@ -21,7 +22,8 @@ from .gemini_service import (
     GeminiVerifier,
     get_verifier,
 )
-from .schemas import VerificationRequest, VerificationResponse, VerificationResult
+from .schemas import VerificationRequest, VerificationResponse, VerificationResult, VerificationRecordDetail
+from .db import init_db_pool, close_db_pool, insert_verification_record, fetch_verification_record
 
 
 def _load_env() -> bool:
@@ -53,11 +55,27 @@ if _env_loaded:
 else:
     logger.debug("No .env file found; relying on process environment")
 
+GEMINI_MAX_ATTEMPTS = max(1, int(os.environ.get("GEMINI_VERIFICATION_ATTEMPTS", "2")))
+
 app = FastAPI(
     title="HackTruth Backend",
     version="0.1.0",
     description="FastAPI backend that checks if news is fake using Gemini.",
 )
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    try:
+        await init_db_pool()
+    except Exception as exc:
+        logger.exception("Failed to initialize database connection pool")
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    await close_db_pool()
 
 # Allow all origins to simplify hackathon integration; tighten later if needed.
 app.add_middleware(
@@ -125,32 +143,119 @@ async def verify_text(
 ) -> VerificationResponse:
     logger.debug("Received verification request: %s", payload)
 
-    try:
-        result, raw_response = await run_in_threadpool(verifier.verify, payload.text)
-    except GeminiConfigurationError as exc:
-        logger.exception("Gemini configuration error")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except GeminiVerificationError as exc:
-        logger.exception("Gemini verification failed")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 - want full traceback in logs
-        logger.exception("Unexpected verification failure")
+    result: Optional[VerificationResult] = None
+    raw_response: Optional[str] = None
+
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            result, raw_response = await run_in_threadpool(verifier.verify, payload.text)
+            break
+        except GeminiConfigurationError as exc:
+            logger.exception("Gemini configuration error on attempt %d", attempt)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GeminiVerificationError as exc:
+            logger.warning(
+                "Gemini verification attempt %d/%d failed: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc,
+            )
+            if attempt == GEMINI_MAX_ATTEMPTS:
+                logger.exception("Gemini verification failed after retries")
+                raise HTTPException(
+                    status_code=502,
+                    detail="Gemini verification failed after multiple attempts.",
+                ) from exc
+        except Exception as exc:  # noqa: BLE001 - want full traceback in logs
+            logger.exception("Unexpected verification failure on attempt %d", attempt)
+            raise HTTPException(
+                status_code=500,
+                detail="Unexpected error while verifying the text.",
+            ) from exc
+
+    if result is None:
+        logger.error(
+            "Gemini verification did not produce a result after %d attempts",
+            GEMINI_MAX_ATTEMPTS,
+        )
         raise HTTPException(
             status_code=500,
-            detail="Unexpected error while verifying the text.",
-        ) from exc
+            detail="Verification failed without a usable response.",
+        )
+    if raw_response is None:
+        logger.warning("Gemini verification returned no raw response payload")
 
     if not isinstance(result, VerificationResult):
         # This should never trigger thanks to validation, but log defensively.
         logger.warning("Verification result was not a VerificationResult instance: %s", result)
         result = VerificationResult.model_validate(result)
 
+    try:
+        record_id = await insert_verification_record(
+            input_text=payload.text,
+            accuracy=result.accuracy,
+            accuracy_reason=result.accuracy_reason,
+            reason=result.reason,
+            urls=result.urls,
+            raw_response=raw_response,
+        )
+    except Exception as exc:
+        logger.exception("Failed to persist verification result")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist verification result.",
+        ) from exc
+
     logger.debug(
-        "Verification succeeded with accuracy=%s urls=%d",
+        "Verification succeeded with accuracy=%s urls=%d record_id=%s",
         result.accuracy,
         len(result.urls),
+        record_id,
     )
-    return VerificationResponse(result=result, raw_model_response=raw_response)
+    return VerificationResponse(
+        result=result,
+        record_id=record_id,
+        raw_model_response=raw_response,
+    )
+
+
+@app.get(
+    "/verify/text/{record_id}",
+    response_model=VerificationRecordDetail,
+    tags=["verification"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_verification_record(record_id: UUID) -> VerificationRecordDetail:
+    logger.debug("Fetching verification record for id=%s", record_id)
+    try:
+        record = await fetch_verification_record(record_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch verification record with id=%s", record_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch verification record.",
+        ) from exc
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Verification record not found.",
+        )
+
+    result = VerificationResult(
+        accuracy=record["accuracy"],
+        accuracy_reason=record["accuracy_reason"] or "",
+        reason=record["reason"],
+        urls=record["urls"],
+    )
+
+    return VerificationRecordDetail(
+        record_id=record["id"],
+        input_text=record["input_text"],
+        result=result,
+        raw_model_response=record["raw_model_response"],
+        created_at=record["created_at"],
+    )
 
 @app.post(
     "/verify/image",
