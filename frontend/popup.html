@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fact Check</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="popup-container">
+      <div class="header">
+        <div class="logo">
+          <span class="logo-icon">🔍</span>
+          <h1>Fact Check</h1>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="description">
+          <h2>환영합니다! 👋</h2>
+          <p>
+            Fact Check는 웹에서 발견한 정보의 신뢰성을 확인하는 데 도움을 주는
+            확장 프로그램입니다.
+          </p>
+
+          <div class="features">
+            <h3>주요 기능</h3>
+            <ul>
+              <li>
+                <span class="feature-icon">📝</span>
+                <div>
+                  <strong>텍스트 팩트 체크</strong>
+                  <p>텍스트를 드래그하고 우클릭하여 사실 가능성을 확인하세요</p>
+                </div>
+              </li>
+              <li>
+                <span class="feature-icon">🖼️</span>
+                <div>
+                  <strong>이미지 검증</strong>
+                  <p>이미지를 우클릭하여 AI 생성 여부를 확인하세요</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="usage">
+            <h3>사용 방법</h3>
+            <ol>
+              <li>웹페이지에서 텍스트를 드래그하거나 이미지를 찾습니다</li>
+              <li>우클릭하여 "Fact Check" 메뉴를 선택합니다</li>
+              <li>팩트 체크 결과를 확인합니다</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="settings">
+          <div class="setting-item">
+            <div class="setting-info">
+              <strong>팩트 체크 활성화</strong>
+              <p>확장 프로그램의 팩트 체크 기능을 켜거나 끌 수 있습니다</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="factCheckToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- API URL 설정 -->
+          <div class="setting-item api-url-setting">
+            <div class="setting-info">
+              <strong>API Base URL</strong>
+              <p>팩트 체크 API 서버 주소를 입력하세요</p>
+            </div>
+            <div class="api-url-input-container">
+              <input 
+                type="url" 
+                id="apiUrlInput" 
+                placeholder="https://api.example.com"
+                class="api-url-input"
+              />
+              <button id="saveApiUrlBtn" class="save-api-url-btn">저장</button>
+              <p id="apiUrlStatus" class="api-url-status"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>⚠️ 이것은 테스트 버전입니다</p>
+          <p class="version">Version 1.0.0</p>
+        </div>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
