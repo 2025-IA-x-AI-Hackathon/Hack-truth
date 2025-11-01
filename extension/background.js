@@ -17,12 +17,64 @@ const getApiBaseUrl = async () => {
   });
 };
 
+const getShareBaseUrl = async () => {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(["shareBaseUrl"], (result) => {
+      if (result.shareBaseUrl) {
+        resolve(result.shareBaseUrl);
+      } else {
+        resolve(null);
+      }
+    });
+  });
+};
+
+const buildShareUrl = (baseUrl, recordId) => {
+  if (!baseUrl || !recordId) {
+    return null;
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    url.searchParams.set("id", recordId);
+    return url.toString();
+  } catch (error) {
+    console.warn("Invalid share base URL provided:", error);
+    return null;
+  }
+};
+
+const isLocalDevelopmentUrl = (targetUrl) => {
+  if (!targetUrl || typeof targetUrl !== "string") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(targetUrl);
+    const { protocol, hostname } = parsed;
+
+    if (protocol === "chrome-extension:" || protocol === "chrome:") {
+      return true;
+    }
+
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".local")
+    );
+  } catch (error) {
+    console.warn("Failed to parse URL while checking localhost:", targetUrl, error);
+    return false;
+  }
+};
+
 // 확장 프로그램 설치 시 초기화
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Fact Check extension installed");
 
   chrome.storage.sync.get(
-    ["isFactCheckEnabled", "isBackgroundDetectionEnabled"],
+    ["isFactCheckEnabled", "isBackgroundDetectionEnabled", "shareBaseUrl"],
     (result) => {
       const updates = {};
 
@@ -32,6 +84,10 @@ chrome.runtime.onInstalled.addListener(() => {
 
       if (typeof result.isBackgroundDetectionEnabled !== "boolean") {
         updates.isBackgroundDetectionEnabled = true;
+      }
+
+      if (typeof result.shareBaseUrl !== "string") {
+        updates.shareBaseUrl = "";
       }
 
       if (Object.keys(updates).length > 0) {
@@ -118,17 +174,25 @@ const handleTextFactCheck = async (info, tab) => {
 
   // API 요청 전송
   fetchFactCheckAPI(selectedText, apiBaseUrl)
-    .then((response) => {
+    .then(async (response) => {
       console.log("========== Text Fact Check Response ==========");
       console.log("Response Body:", JSON.stringify(response, null, 2));
       console.log("==============================================");
+
+      const shareBaseUrl = await getShareBaseUrl();
+      const shareUrl = buildShareUrl(shareBaseUrl, response.record_id);
 
       // 성공 시 결과 모달 표시
       sendMessageToTab(tab.id, {
         type: "SHOW_RESULT_MODAL",
         data: {
           result: response.result,
-          rawModelResponse: response.raw_model_response,
+          accuracyReason:
+            response.result?.accuracy_reason || response.accuracy_reason || "",
+          recordId: response.record_id,
+          shareUrl,
+          createdAt: response.created_at,
+          inputText: response.input_text,
         },
       });
     })
@@ -540,6 +604,11 @@ const handleAutoFactCheck = async (text, url, tabId) => {
   if (!backgroundDetectionEnabled) {
     console.log("Auto fact check skipped: background detection is disabled");
     return { skipped: true, reason: "background_detection_disabled" };
+  }
+
+  if (isLocalDevelopmentUrl(url)) {
+    console.log("Auto fact check skipped: running on localhost URL", url);
+    return { skipped: true, reason: "localhost_url" };
   }
 
   // API URL 가져오기
