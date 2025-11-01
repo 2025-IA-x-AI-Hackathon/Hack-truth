@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 # ===== 텍스트 판별용 (기존 유지) =====
 class VerificationRequest(BaseModel):
@@ -32,40 +32,38 @@ class VerificationResponse(BaseModel):
     )
 
 
-# ===== 이미지 판별용 (신규 추가) =====
-'''
-class ImageVerificationResult(BaseModel):
-    """딥페이크(생성이미지) 판별 결과 정규화."""
-    success: bool = Field(..., description="모델 추론 성공 여부")
-    verdict: Optional[str] = Field(
-        default=None,
-        description="판정 결과: 'Fake (딥페이크)' 또는 'Real (진짜)'",
+class ImageVerificationRequest(BaseModel):
+    """이미지 판별 요청 (URL 기반)."""
+
+    image_url: HttpUrl = Field(
+        ...,
+        description="확인할 이미지의 절대 URL.",
     )
-    confidence: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
-        description="max(fake_prob, real_prob) ∈ [0,1]",
-    )
-    fake_prob: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
-        description="softmax(outputs.logits)[0]",
-    )
-    real_prob: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
-        description="softmax(outputs.logits)[1]",
-    )
-    error: Optional[str] = Field(default=None, description="에러 메시지(실패 시)")
-    model_name: str = Field(
-        default="prithivMLmods/deepfake-detector-model-v1",
-        description="사용한 이미지 식별 모델 이름/ID",
-    )
-'''
 
 class ImageVerificationResult(BaseModel):
     success: bool = Field(..., description="모델 추론 성공 여부")
-    verdict: Optional[str] = None          # "Fake (딥페이크)" | "Real (진짜)"
-    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    fake_prob: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    real_prob: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    verdict: Optional[str] = Field(
+        default=None,
+        description="판정 결과. 'Real' 또는 'Fake' 문자열.",
+    )
+    confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="가장 높은 확률(%) 값. 0.0~100.0 사이.",
+    )
+    fake_prob: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="딥페이크 확률(%). 0.0~100.0 사이.",
+    )
+    real_prob: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="진짜 이미지 확률(%). 0.0~100.0 사이.",
+    )
     error: Optional[str] = None
     model_name: str = Field(default="prithivMLmods/deepfake-detector-model-v1")
 
@@ -77,6 +75,7 @@ __all__ = [
     "VerificationRequest",
     "VerificationResult",
     "VerificationResponse",
+    "ImageVerificationRequest",
     "ImageVerificationResult",
     "ImageVerificationResponse",
 ]
