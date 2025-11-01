@@ -123,7 +123,7 @@ const handleTextFactCheck = async (info, tab) => {
 
 // API 요청 함수
 const fetchFactCheckAPI = async (text, apiBaseUrl) => {
-  const url = `${apiBaseUrl}/verify-text`;
+  const url = `${apiBaseUrl}/verify/text`;
 
   console.log("API Request URL:", url);
   console.log("API Request Body:", { text: text.substring(0, 100) + "..." });
