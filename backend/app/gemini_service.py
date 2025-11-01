@@ -99,7 +99,7 @@ class GeminiVerifier:
         self._generate_config = types.GenerateContentConfig(**config_kwargs)
 
     def verify(self, news_text: str) -> Tuple[VerificationResult, str]:
-        """Send the text to Gemini and return the parsed verdict plus raw JSON."""
+        """Send the text to Gemini and return the parsed result plus raw JSON."""
         if not news_text.strip():
             raise GeminiVerificationError("News text is empty after trimming whitespace.")
 

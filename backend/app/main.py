@@ -105,5 +105,9 @@ async def verify_text(
         logger.warning("Verification result was not a VerificationResult instance: %s", result)
         result = VerificationResult.model_validate(result)
 
-    logger.debug("Verification succeeded with verdict=%s accuracy=%s", result.verdict, result.accuracy)
+    logger.debug(
+        "Verification succeeded with accuracy=%s urls=%d",
+        result.accuracy,
+        len(result.urls),
+    )
     return VerificationResponse(result=result, raw_model_response=raw_response)
