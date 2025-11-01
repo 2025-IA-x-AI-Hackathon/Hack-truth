@@ -7,10 +7,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 MODEL_NAME = "prithivMLmods/deepfake-detector-model-v1"
-_processor = AutoImageProcessor.from_pretrained(MODEL_NAME)
+_processor = AutoImageProcessor.from_pretrained(MODEL_NAME, use_fast=True)
 _model = SiglipForImageClassification.from_pretrained(MODEL_NAME)
 _model.eval()
-
 
 def _error_result(message: str) -> dict:
     return {
@@ -22,7 +21,6 @@ def _error_result(message: str) -> dict:
         "error": message,
         "model_name": MODEL_NAME,
     }
-
 
 def detect_deepfake_image_bytes(file_bytes: bytes) -> dict:
     """업로드된 이미지 바이트로 딥페이크 여부 판별"""
@@ -62,14 +60,14 @@ def detect_deepfake_image_bytes(file_bytes: bytes) -> dict:
         confidence_raw = max(fake_prob_raw, real_prob_raw)
 
         verdict = (
-            "Fake (딥페이크)"
+            "Fake"
             if fake_prob_raw >= real_prob_raw
-            else "Real (진짜)"
+            else "Real"
         )
 
-        fake_prob = round(fake_prob_raw, 4)
-        real_prob = round(real_prob_raw, 4)
-        confidence = round(confidence_raw, 4)
+        fake_prob = round(fake_prob_raw * 100, 1)
+        real_prob = round(real_prob_raw * 100, 1)
+        confidence = round(confidence_raw * 100, 1)
 
         return {
             "success": True,

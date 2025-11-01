@@ -3,15 +3,23 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import ParseResult, urlparse
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import File, UploadFile
+
 from .detectors.deepfake_detector import detect_deepfake_image_bytes, MODEL_NAME
 
-from .schemas import ImageVerificationResponse, ImageVerificationResult, VideoInput
+from .schemas import (
+    ImageVerificationRequest,
+    ImageVerificationResponse,
+    ImageVerificationResult,
+    VideoInput
+)
+
 from .check_video import download_youtube_video, sample_frames, analyze_fft, analyze_motion, predict_ai_video
 from .gemini_service import (
     GeminiConfigurationError,
@@ -70,10 +78,38 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 ALLOWED_IMAGE_EXTENSION_LABEL = ", ".join(
     ext.lstrip(".").upper() for ext in sorted(ALLOWED_IMAGE_EXTENSIONS)
 )
+ALLOWED_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/bmp",
+}
+ALLOWED_IMAGE_CONTENT_TYPE_LABEL = ", ".join(
+    ctype.split("/")[-1].upper() for ctype in sorted(ALLOWED_IMAGE_CONTENT_TYPES)
+)
+
+DEFAULT_IMAGE_REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+DEFAULT_IMAGE_TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+DEFAULT_IMAGE_RETRIES = 2
 
 
 def verifier_dependency() -> GeminiVerifier:
     return get_verifier()
+
+
+def _build_image_request_headers(parsed_url: ParseResult) -> dict[str, str]:
+    headers = DEFAULT_IMAGE_REQUEST_HEADERS.copy()
+    if parsed_url.scheme and parsed_url.netloc:
+        headers["Referer"] = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+    return headers
 
 
 @app.get("/health", tags=["meta"])
@@ -129,45 +165,82 @@ async def verify_text(
     status_code=status.HTTP_200_OK,
 )
 async def verify_image(
-    image: UploadFile = File(...),
+    payload: ImageVerificationRequest,
 ) -> ImageVerificationResponse:
     """
     이미지가 AI 생성 여부를 판별하는 엔드포인트.
-    multipart/form-data 형식으로 이미지를 업로드하면
-    딥페이크 식별 모델을 호출해 결과를 반환한다.
+    사용자는 이미지 URL을 전달하며, 백엔드는 해당 이미지를 내려받아 판별한다.
     """
-    logger.debug("Received image verification request: filename=%s", image.filename)
+    image_url = str(payload.image_url)
+    logger.debug("Received image verification request: url=%s", image_url)
 
-    filename = image.filename or "uploaded-image"
-    extension = Path(filename).suffix.lower()
-    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+    parsed_url = urlparse(image_url)
+    raw_path = parsed_url.path
+    normalized_path = raw_path.split("!")[0]
+    extension = Path(normalized_path).suffix.lower()
+    if extension and extension not in ALLOWED_IMAGE_EXTENSIONS:
         message = (
             "지원하지 않는 이미지 확장자 유형입니다. "
             f"지원 형식: {ALLOWED_IMAGE_EXTENSION_LABEL}."
         )
-        logger.warning("Rejected image with unsupported extension: %s", filename)
+        logger.warning("Rejected image with unsupported extension: %s", image_url)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
-    if image.content_type and not image.content_type.startswith("image/"):
-        logger.warning("Rejected non-image upload: %s (%s)", filename, image.content_type)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미지 파일만 업로드할 수 있습니다.",
-        )
+    request_headers = _build_image_request_headers(parsed_url)
 
     try:
-        content = await image.read()
-    except Exception as exc:
-        logger.exception("Failed to read uploaded image: filename=%s", filename)
+        transport = httpx.AsyncHTTPTransport(retries=DEFAULT_IMAGE_RETRIES)
+        async with httpx.AsyncClient(
+            timeout=DEFAULT_IMAGE_TIMEOUT,
+            follow_redirects=True,
+            headers=request_headers,
+            transport=transport,
+        ) as client:
+            response = await client.get(image_url)
+    except httpx.InvalidURL:
+        logger.warning("Invalid image URL provided: %s", image_url)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미지 데이터를 읽는 중 문제가 발생했습니다. 다시 시도해주세요.",
-        ) from exc
+            detail="유효한 이미지 URL이 아닙니다.",
+        )
+    except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+        logger.warning("Failed to fetch image: %s (%s)", image_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 URL에 연결할 수 없습니다. 주소를 확인하고 다시 시도해주세요.",
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("HTTP error while fetching image: %s (%s)", image_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 URL을 불러오는 중 오류가 발생했습니다.",
+        )
 
+    if response.status_code >= 400:
+        logger.warning(
+            "Image URL responded with status %s: %s",
+            response.status_code,
+            image_url,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 URL에서 파일을 가져오지 못했습니다. URL 접근 권한을 확인해주세요.",
+        )
+
+    content_type = response.headers.get("content-type", "").split(";")[0].lower()
+    if content_type and content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        message = (
+            "지원하지 않는 이미지 MIME 유형입니다. "
+            f"지원 형식: {ALLOWED_IMAGE_CONTENT_TYPE_LABEL}."
+        )
+        logger.warning("Rejected image with unsupported MIME type %s: %s", content_type, image_url)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    content = response.content
     if not content:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="업로드된 이미지가 비어 있습니다. 다른 파일로 다시 시도해주세요.",
+            detail="이미지 데이터를 내려받지 못했습니다. 다른 URL로 다시 시도해주세요.",
         )
 
     try:
