@@ -203,7 +203,7 @@ async def verify_image(
     )
     return ImageVerificationResponse(result=result)
 
-@app.post("/video")
+@app.post("/verify/video")
 def analyze_video(data: VideoInput):
     try:
         video_path = download_youtube_video(data.url)
