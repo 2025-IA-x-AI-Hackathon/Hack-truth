@@ -54,3 +54,6 @@ __all__ = [
     "ImageVerificationResult",
     "ImageVerificationResponse",
 ]
+
+class VideoInput(BaseModel):
+    url: str
