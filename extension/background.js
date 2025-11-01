@@ -242,6 +242,96 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
   }
 };
 
+const fetchVideoFactCheckAPI = async (videoUrl, apiBaseUrl) => {
+  const url = `${apiBaseUrl}/verify/video`;
+  const requestBody = { url: videoUrl };
+
+  console.log("========== Video API Request ==========");
+  console.log("URL:", url);
+  console.log("Method: POST");
+  console.log("Request Body:", JSON.stringify(requestBody, null, 2));
+  console.log("========================================");
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log("Video API Response Status:", response.status);
+    console.log(
+      "Video API Response Headers:",
+      response.headers.get("content-type")
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const textResponse = await response.text();
+      console.error(
+        "Video API Non-JSON response received:",
+        textResponse.substring(0, 500)
+      );
+
+      if (response.status === 404) {
+        throw new Error(
+          `영상 팩트 체크 API 엔드포인트를 찾을 수 없습니다. URL을 확인해주세요: ${url}`
+        );
+      } else if (response.status === 0 || response.status === 500) {
+        throw new Error(
+          `영상 팩트 체크 서버 오류가 발생했습니다. API 서버가 정상적으로 작동하는지 확인해주세요.`
+        );
+      } else if (
+        textResponse.includes("<!doctype") ||
+        textResponse.includes("<!DOCTYPE")
+      ) {
+        throw new Error(
+          `영상 팩트 체크 API 서버가 HTML을 반환했습니다. API URL이 올바른지 확인해주세요.\n요청 URL: ${url}\n응답 상태: ${response.status}`
+        );
+      } else {
+        throw new Error(
+          `예상치 못한 영상 API 응답 형식입니다. (Content-Type: ${contentType})`
+        );
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("========== Video API Error Response ==========");
+      console.error("Status:", response.status);
+      console.error("Status Text:", response.statusText);
+      console.error("Error Body:", errorText);
+      console.error("================================================");
+      throw new Error(
+        `영상 팩트 체크 API 요청 실패 (${response.status}): ${response.statusText}`
+      );
+    }
+
+    const jsonData = await response.json();
+    console.log("========== Video API Response ==========");
+    console.log("Response Body:", JSON.stringify(jsonData, null, 2));
+    console.log("=========================================");
+    return jsonData;
+  } catch (error) {
+    console.error("========== Video API Request Error ==========");
+    console.error("Error:", error);
+    console.error("==============================================");
+
+    if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError")
+    ) {
+      throw new Error(
+        `영상 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. API URL이 올바른지 확인해주세요: ${url}\n2. 서버가 실행 중인지 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
+      );
+    }
+
+    throw error;
+  }
+};
+
 // 이미지 팩트 체크 처리
 const handleImageFactCheck = (info, tab) => {
   const imageUrl = info.srcUrl;
@@ -254,6 +344,100 @@ const handleImageFactCheck = (info, tab) => {
       content: imageUrl,
     },
   });
+};
+
+const handleVideoFactCheck = async (videoUrl, platform, tabId) => {
+  console.log("========== Video Fact Check Request ==========");
+  console.log(
+    "Request Body:",
+    JSON.stringify({ url: videoUrl, platform }, null, 2)
+  );
+  console.log("================================================");
+
+  if (!videoUrl) {
+    throw new Error("영상 URL이 전달되지 않았습니다.");
+  }
+
+  const storage = await chrome.storage.sync.get(["isFactCheckEnabled"]);
+  if (!storage.isFactCheckEnabled) {
+    console.log("Video fact check is disabled");
+    throw new Error("Video fact check is disabled");
+  }
+
+  const apiBaseUrl = await getApiBaseUrl();
+  if (!apiBaseUrl) {
+    console.log("API URL not configured, skipping video fact check");
+    sendMessageToTab(tabId, {
+      type: "SHOW_API_URL_WARNING",
+      data: {
+        message:
+          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
+      },
+    });
+    throw new Error("API URL not configured");
+  }
+
+  sendMessageToTab(tabId, {
+    type: "SHOW_LOADING",
+    data: {
+      message: "요청한 작업을 처리중입니다",
+    },
+  });
+
+  try {
+    const response = await fetchVideoFactCheckAPI(videoUrl, apiBaseUrl);
+
+    console.log("========== Video Fact Check API Response ==========");
+    console.log("Response Body:", JSON.stringify(response, null, 2));
+    console.log("===================================================");
+
+    const payload = {
+      videoUrl,
+      platform,
+      fftArtifactScore: response.fft_artifact_score,
+      actionPatternScore: response.action_pattern_score,
+      result: response.result,
+      rawResponse: response,
+    };
+
+    sendMessageToTab(tabId, {
+      type: "SHOW_VIDEO_RESULT_MODAL",
+      data: payload,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("========== Video Fact Check Error ==========");
+    console.error("Error:", error);
+    console.error("Error Message:", error.message);
+    console.error("============================================");
+
+    const isApiUrlError =
+      error.message.includes("API URL") ||
+      error.message.includes("API 서버에 연결할 수 없습니다") ||
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError");
+
+    if (isApiUrlError) {
+      sendMessageToTab(tabId, {
+        type: "SHOW_API_URL_WARNING",
+        data: {
+          message:
+            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+        },
+      });
+    } else {
+      sendMessageToTab(tabId, {
+        type: "SHOW_ERROR",
+        data: {
+          message: "영상 팩트 체크 요청 중 오류가 발생했습니다.",
+          error: error.message,
+        },
+      });
+    }
+
+    throw error;
+  }
 };
 
 // 탭에 메시지 전송 (에러 처리 포함)
@@ -481,16 +665,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const { text, url } = request.data;
 
     // 비동기 처리 시작
-  handleAutoFactCheck(text, url, tabId)
-    .then((responseData) => {
-      console.log("========== Auto Fact Check Complete Response ==========");
-      console.log(
-        "Response Body:",
-        JSON.stringify({ success: true, data: responseData }, null, 2)
-      );
-      console.log("========================================================");
-      sendResponse({ success: true, data: responseData });
-    })
+    handleAutoFactCheck(text, url, tabId)
+      .then((responseData) => {
+        console.log("========== Auto Fact Check Complete Response ==========");
+        console.log(
+          "Response Body:",
+          JSON.stringify({ success: true, data: responseData }, null, 2)
+        );
+        console.log("========================================================");
+        sendResponse({ success: true, data: responseData });
+      })
       .catch((error) => {
         console.error("========== Auto Fact Check Error Response ==========");
         console.error(
@@ -502,6 +686,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
 
     // 비동기 응답을 위해 true 반환 (중요!)
+    return true;
+  } else if (request.type === "REQUEST_VIDEO_FACT_CHECK") {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      console.error("No tab ID found for video fact check");
+      sendResponse({ success: false, error: "Tab ID not found" });
+      return;
+    }
+
+    const { url, platform } = request.data || {};
+
+    handleVideoFactCheck(url, platform, tabId)
+      .then((payload) => {
+        console.log("========== Video Fact Check Complete ==========");
+        console.log("Response Body:", JSON.stringify(payload, null, 2));
+        console.log("===============================================");
+        sendResponse({ success: true, data: payload });
+      })
+      .catch((error) => {
+        console.error("========== Video Fact Check Error Response ==========");
+        console.error(
+          "Response Body:",
+          JSON.stringify({ success: false, error: error.message }, null, 2)
+        );
+        console.error("=====================================================");
+        sendResponse({ success: false, error: error.message });
+      });
+
     return true;
   }
 });

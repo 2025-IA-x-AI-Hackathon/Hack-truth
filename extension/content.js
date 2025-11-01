@@ -60,8 +60,13 @@ const handlePageButtonClick = (platform) => {
   // 버튼 숨기기
   hidePageButton();
 
+  const currentUrl = window.location.href;
+
   // URL 오버레이 표시
-  showUrlOverlay(window.location.href, platform);
+  showUrlOverlay(currentUrl, platform);
+
+  // 영상 팩트 체크 요청
+  requestVideoFactCheck(currentUrl, platform);
 };
 
 // 기존 버튼 제거
@@ -137,6 +142,44 @@ const removeUrlOverlay = () => {
   if (overlay) {
     overlay.remove();
   }
+};
+
+// 영상 팩트 체크 요청
+const requestVideoFactCheck = (url, platform) => {
+  const requestData = { url, platform };
+
+  console.log("========== Video Fact Check Request (Content) ==========");
+  console.log("Request Body:", JSON.stringify(requestData, null, 2));
+  console.log("========================================================");
+
+  chrome.runtime.sendMessage(
+    {
+      type: "REQUEST_VIDEO_FACT_CHECK",
+      data: requestData,
+    },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "Video fact check request error:",
+          chrome.runtime.lastError
+        );
+        removeUrlOverlay();
+        showPageButtonAgain();
+        return;
+      }
+
+      console.log(
+        "========== Video Fact Check Response (Content) =========="
+      );
+      console.log("Response Body:", JSON.stringify(response, null, 2));
+      console.log("=========================================================");
+
+      if (!response || !response.success) {
+        removeUrlOverlay();
+        showPageButtonAgain();
+      }
+    }
+  );
 };
 
 // 페이지 로드 시 초기화는 아래에서 처리
@@ -355,6 +398,109 @@ const escapeHtml = (text) => {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+};
+
+// 영상 팩트 체크 결과 모달 표시
+const showVideoResultModal = (data) => {
+  removeResultModal();
+
+  const modal = document.createElement("div");
+  modal.id = "fact-check-result-modal";
+  modal.className = "fact-check-result-modal video";
+
+  const platformName =
+    data?.platform === "youtube"
+      ? "YouTube"
+      : data?.platform === "instagram"
+      ? "Instagram"
+      : "Video";
+
+  const summaryText = data?.result
+    ? escapeHtml(data.result)
+    : "영상 분석 결과를 불러오지 못했습니다.";
+
+  const detailText =
+    data?.rawResponse?.detail ||
+    data?.rawResponse?.description ||
+    data?.rawResponse?.summary ||
+    "";
+
+  const referencesRaw =
+    data?.rawResponse?.references ||
+    data?.rawResponse?.reference_urls ||
+    data?.rawResponse?.urls ||
+    [];
+
+  const references = Array.isArray(referencesRaw)
+    ? referencesRaw
+    : typeof referencesRaw === "string" && referencesRaw.length > 0
+    ? [referencesRaw]
+    : [];
+
+  modal.innerHTML = `
+    <div class="modal-backdrop" onclick="document.getElementById('fact-check-result-modal').remove()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🎬 ${platformName} 영상 팩트 체크 결과</h2>
+        <button class="modal-close-btn" onclick="document.getElementById('fact-check-result-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="result-section">
+          <h3>결과 요약</h3>
+          <p class="video-result-summary">${summaryText}</p>
+        </div>
+
+        <div class="result-section">
+          <h3>신뢰 지표</h3>
+          <div class="video-score-grid">
+            <div class="video-score-card">
+              <span class="score-label">FFT Artifact Score</span>
+              <span class="score-value">${escapeHtml(
+                data?.fftArtifactScore ?? "-"
+              )}</span>
+            </div>
+            <div class="video-score-card">
+              <span class="score-label">Action Pattern Score</span>
+              <span class="score-value">${escapeHtml(
+                data?.actionPatternScore ?? "-"
+              )}</span>
+            </div>
+          </div>
+        </div>
+
+        ${
+          detailText
+            ? `
+        <div class="result-section">
+          <h3>상세 설명</h3>
+          <p class="video-detail-text">${escapeHtml(detailText)}</p>
+        </div>
+        `
+            : ""
+        }
+
+        ${
+          references.length > 0
+            ? `
+        <div class="result-section">
+          <h3>참고 레퍼런스</h3>
+          <ul class="reference-list">
+            ${references
+              .map(
+                (ref) =>
+                  `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`
+              )
+              .join("")}
+          </ul>
+        </div>
+        `
+            : ""
+        }
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
 };
 
 // ==================== 백그라운드 감지 기능 ====================
@@ -733,6 +879,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "SHOW_API_URL_WARNING") {
     hideLoadingOverlay();
     showApiUrlWarningOverlay(request.data.message);
+  } else if (request.type === "SHOW_VIDEO_RESULT_MODAL") {
+    hideLoadingOverlay();
+    removeUrlOverlay();
+    showVideoResultModal(request.data);
+    showPageButtonAgain();
+    // 결과 모달 표시 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   }
 });
 
