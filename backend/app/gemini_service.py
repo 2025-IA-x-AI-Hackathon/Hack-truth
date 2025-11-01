@@ -137,7 +137,7 @@ class GeminiVerifier:
 @lru_cache(maxsize=1)
 def get_verifier() -> GeminiVerifier:
     """Lazily construct a singleton verifier using environment configuration."""
-    model = os.environ.get("GEMINI_MODEL", "models/gemini-1.5-flash")
+    model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
     enable_search = os.environ.get("GEMINI_ENABLE_GOOGLE_SEARCH", "true").lower() == "true"
     thinking_budget_str = os.environ.get("GEMINI_THINKING_BUDGET", "-1")
     try:
@@ -149,12 +149,12 @@ def get_verifier() -> GeminiVerifier:
         )
         thinking_budget = -1
 
-    temperature_str = os.environ.get("GEMINI_TEMPERATURE", "0.2")
+    temperature_str = os.environ.get("GEMINI_TEMPERATURE", "0.95")
     try:
         temperature = float(temperature_str)
     except ValueError:
-        logger.warning("Invalid GEMINI_TEMPERATURE='%s'. Falling back to 0.2.", temperature_str)
-        temperature = 0.2
+        logger.warning("Invalid GEMINI_TEMPERATURE='%s'. Falling back to 0.95.", temperature_str)
+        temperature = 0.95
 
     return GeminiVerifier(
         model=model,

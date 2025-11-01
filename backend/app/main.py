@@ -74,12 +74,12 @@ async def health() -> dict[str, Any]:
 
 
 @app.post(
-    "/verify-news",
+    "/verify-text",
     response_model=VerificationResponse,
     tags=["verification"],
     status_code=status.HTTP_200_OK,
 )
-async def verify_news(
+async def verify_text(
     payload: VerificationRequest,
     verifier: GeminiVerifier = Depends(verifier_dependency),
 ) -> VerificationResponse:
@@ -97,7 +97,7 @@ async def verify_news(
         logger.exception("Unexpected verification failure")
         raise HTTPException(
             status_code=500,
-            detail="Unexpected error while verifying the news.",
+            detail="Unexpected error while verifying the text.",
         ) from exc
 
     if not isinstance(result, VerificationResult):
