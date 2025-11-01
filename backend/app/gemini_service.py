@@ -38,7 +38,7 @@ Return **only** one JSON object:
 ```
 
 * `accuracy`: integer percentage as a string `"0%"`–`"100%"`.
-* `reason`: concise justification; neutral and nonpartisan.
+* `reason`: **must be in Korean (Hangul)**; concise justification; neutral and nonpartisan.
 * `urls`: direct source URLs actually used; if none available, return `[]`.
 
 **Edge Cases**
