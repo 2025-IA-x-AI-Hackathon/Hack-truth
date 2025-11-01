@@ -33,32 +33,6 @@ class VerificationResponse(BaseModel):
 
 
 # ===== 이미지 판별용 (신규 추가) =====
-'''
-class ImageVerificationResult(BaseModel):
-    """딥페이크(생성이미지) 판별 결과 정규화."""
-    success: bool = Field(..., description="모델 추론 성공 여부")
-    verdict: Optional[str] = Field(
-        default=None,
-        description="판정 결과: 'Fake (딥페이크)' 또는 'Real (진짜)'",
-    )
-    confidence: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
-        description="max(fake_prob, real_prob) ∈ [0,1]",
-    )
-    fake_prob: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
-        description="softmax(outputs.logits)[0]",
-    )
-    real_prob: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
-        description="softmax(outputs.logits)[1]",
-    )
-    error: Optional[str] = Field(default=None, description="에러 메시지(실패 시)")
-    model_name: str = Field(
-        default="prithivMLmods/deepfake-detector-model-v1",
-        description="사용한 이미지 식별 모델 이름/ID",
-    )
-'''
 
 class ImageVerificationResult(BaseModel):
     success: bool = Field(..., description="모델 추론 성공 여부")
