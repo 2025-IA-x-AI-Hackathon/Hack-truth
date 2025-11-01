@@ -92,6 +92,25 @@ class ImageVerificationResult(BaseModel):
 class ImageVerificationResponse(BaseModel):
     result: ImageVerificationResult
 
+
+class GeminiImageVerdict(BaseModel):
+    fake: str = Field(
+        ...,
+        description="Gemini가 반환한 AI 생성 가능성(%) 문자열, 예: '65%'.",
+    )
+    reason: str = Field(
+        ...,
+        description="Gemini가 제공한 한국어 판정 근거 (1~3문장).",
+    )
+
+
+class GeminiImageVerificationResponse(BaseModel):
+    result: GeminiImageVerdict
+    raw_model_response: Optional[str] = Field(
+        default=None,
+        description="Gemini가 반환한 원본 JSON 문자열 (디버깅용).",
+    )
+
 # 내보낼 심볼 명시(실수 방지)
 __all__ = [
     "VerificationRequest",
@@ -101,6 +120,8 @@ __all__ = [
     "ImageVerificationRequest",
     "ImageVerificationResult",
     "ImageVerificationResponse",
+    "GeminiImageVerdict",
+    "GeminiImageVerificationResponse",
 ]
 
 class VideoRequest(BaseModel):
