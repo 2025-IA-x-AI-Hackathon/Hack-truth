@@ -73,16 +73,20 @@ const handleTextFactCheck = async (info, tab) => {
     return;
   }
 
+  console.log("========== Text Fact Check Request ==========");
+  console.log("Request Body:", JSON.stringify({ text: selectedText }, null, 2));
+  console.log("==============================================");
+
   // Storage에서 API URL 가져오기
   const apiBaseUrl = await getApiBaseUrl();
 
-  // API URL이 설정되지 않은 경우 에러 메시지 표시
+  // API URL이 설정되지 않은 경우 경고 오버레이 표시
   if (!apiBaseUrl) {
     sendMessageToTab(tab.id, {
-      type: "SHOW_ERROR",
+      type: "SHOW_API_URL_WARNING",
       data: {
-        message: "API URL이 설정되지 않았습니다.",
-        error: "팝업에서 API Base URL을 설정해주세요.",
+        message:
+          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
       },
     });
     return;
@@ -99,6 +103,10 @@ const handleTextFactCheck = async (info, tab) => {
   // API 요청 전송
   fetchFactCheckAPI(selectedText, apiBaseUrl)
     .then((response) => {
+      console.log("========== Text Fact Check Response ==========");
+      console.log("Response Body:", JSON.stringify(response, null, 2));
+      console.log("==============================================");
+
       // 성공 시 결과 모달 표시
       sendMessageToTab(tab.id, {
         type: "SHOW_RESULT_MODAL",
@@ -109,24 +117,49 @@ const handleTextFactCheck = async (info, tab) => {
       });
     })
     .catch((error) => {
-      console.error("API request failed:", error);
-      // 에러 시 에러 메시지 표시
-      sendMessageToTab(tab.id, {
-        type: "SHOW_ERROR",
-        data: {
-          message: "팩트 체크 요청 중 오류가 발생했습니다.",
-          error: error.message,
-        },
-      });
+      console.error("========== Text Fact Check Error ==========");
+      console.error("Error:", error);
+      console.error("==========================================");
+
+      // API URL 관련 에러인지 확인
+      const isApiUrlError =
+        error.message.includes("API URL") ||
+        error.message.includes("API 서버에 연결할 수 없습니다") ||
+        error.message.includes("Failed to fetch") ||
+        error.message.includes("NetworkError");
+
+      if (isApiUrlError) {
+        // 잘못된 URL인 경우 경고 오버레이 표시
+        sendMessageToTab(tab.id, {
+          type: "SHOW_API_URL_WARNING",
+          data: {
+            message:
+              "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+          },
+        });
+      } else {
+        // 그 외 에러는 기존 에러 모달 표시
+        sendMessageToTab(tab.id, {
+          type: "SHOW_ERROR",
+          data: {
+            message: "팩트 체크 요청 중 오류가 발생했습니다.",
+            error: error.message,
+          },
+        });
+      }
     });
 };
 
 // API 요청 함수
 const fetchFactCheckAPI = async (text, apiBaseUrl) => {
   const url = `${apiBaseUrl}/verify/text`;
+  const requestBody = { text: text };
 
-  console.log("API Request URL:", url);
-  console.log("API Request Body:", { text: text.substring(0, 100) + "..." });
+  console.log("========== API Request ==========");
+  console.log("URL:", url);
+  console.log("Method: POST");
+  console.log("Request Body:", JSON.stringify(requestBody, null, 2));
+  console.log("===================================");
 
   try {
     const response = await fetch(url, {
@@ -134,9 +167,7 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        text: text,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     console.log("API Response Status:", response.status);
@@ -176,17 +207,25 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("API Error Response:", errorText);
+      console.error("========== API Error Response ==========");
+      console.error("Status:", response.status);
+      console.error("Status Text:", response.statusText);
+      console.error("Error Body:", errorText);
+      console.error("=========================================");
       throw new Error(
         `API 요청 실패 (${response.status}): ${response.statusText}`
       );
     }
 
     const jsonData = await response.json();
-    console.log("API Response Data:", jsonData);
+    console.log("========== API Response ==========");
+    console.log("Response Body:", JSON.stringify(jsonData, null, 2));
+    console.log("===================================");
     return jsonData;
   } catch (error) {
-    console.error("API Request Error:", error);
+    console.error("========== API Request Error ==========");
+    console.error("Error:", error);
+    console.error("========================================");
 
     // 네트워크 오류인 경우
     if (
@@ -299,19 +338,170 @@ const sendMessageToTab = (tabId, message) => {
   });
 };
 
+// 자동 팩트 체크 처리 (백그라운드 감지)
+const handleAutoFactCheck = async (text, url, tabId) => {
+  console.log("========== Auto Fact Check Request ==========");
+  console.log("Request Body:", JSON.stringify({ text, url }, null, 2));
+  console.log("==============================================");
+
+  // Storage에서 활성화 상태 확인
+  const storage = await chrome.storage.sync.get(["isFactCheckEnabled"]);
+  if (!storage.isFactCheckEnabled) {
+    console.log("Auto fact check is disabled");
+    throw new Error("Auto fact check is disabled");
+  }
+
+  // API URL 가져오기
+  const apiBaseUrl = await getApiBaseUrl();
+  if (!apiBaseUrl) {
+    console.log("API URL not configured, skipping auto fact check");
+    // API URL이 없을 때 경고 오버레이 표시
+    sendMessageToTab(tabId, {
+      type: "SHOW_API_URL_WARNING",
+      data: {
+        message:
+          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
+      },
+    });
+    throw new Error("API URL not configured");
+  }
+
+  console.log("========== Starting API Request ==========");
+  console.log("API Base URL:", apiBaseUrl);
+  console.log("Text length:", text.length);
+  console.log("===========================================");
+
+  try {
+    // API 요청 전송
+    const response = await fetchFactCheckAPI(text, apiBaseUrl);
+
+    console.log("========== Auto Fact Check API Response ==========");
+    console.log("Response Body:", JSON.stringify(response, null, 2));
+    console.log("==================================================");
+
+    // 정확도가 낮은 경우 (거짓 정보 가능성) 경고 표시
+    // accuracy가 문자열 형태 (예: "82%")로 오므로 숫자로 변환
+    const accuracyValue = parseFloat(response.result.accuracy.replace("%", ""));
+
+    console.log("========== Accuracy Check ==========");
+    console.log("Accuracy Value:", accuracyValue);
+    console.log("Threshold: 70");
+    console.log("Should show warning:", accuracyValue < 70);
+    console.log("===================================");
+
+    // 정확도가 70% 미만이면 거짓 정보로 판단
+    if (accuracyValue < 70) {
+      // 현재 탭의 URL 확인
+      const currentTab = await chrome.tabs.get(tabId);
+      const isCurrentPage = currentTab.url === url;
+
+      console.log("========== Showing Warning Overlay ==========");
+      console.log("Is Current Page:", isCurrentPage);
+      console.log("URL:", url);
+      console.log("Current Tab URL:", currentTab.url);
+      console.log("==============================================");
+
+      // 경고 오버레이 표시
+      sendMessageToTab(tabId, {
+        type: "SHOW_WARNING_OVERLAY",
+        data: {
+          isCurrentPage: isCurrentPage,
+          url: url,
+        },
+      });
+    }
+
+    return response;
+  } catch (error) {
+    console.error("========== Auto Fact Check Error ==========");
+    console.error("Error:", error);
+    console.error("Error Message:", error.message);
+    console.error("============================================");
+
+    // API URL 관련 에러인지 확인
+    const isApiUrlError =
+      error.message.includes("API URL") ||
+      error.message.includes("API 서버에 연결할 수 없습니다") ||
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError");
+
+    if (isApiUrlError) {
+      // 잘못된 URL인 경우 경고 오버레이 표시
+      sendMessageToTab(tabId, {
+        type: "SHOW_API_URL_WARNING",
+        data: {
+          message:
+            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+        },
+      });
+    }
+
+    // 에러를 다시 throw하여 상위에서 처리할 수 있도록 함
+    throw error;
+  }
+};
+
 // Popup에서 오는 메시지 처리
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("========== Background Script Message Received ==========");
+  console.log("Message Type:", request.type);
+  console.log(
+    "Message Data:",
+    JSON.stringify(request.data || request, null, 2)
+  );
+  console.log("=======================================================");
+
   if (request.type === "TOGGLE_FACT_CHECK") {
     isFactCheckEnabled = request.enabled;
     chrome.storage.sync.set({ isFactCheckEnabled: request.enabled });
     sendResponse({ success: true });
   } else if (request.type === "GET_FACT_CHECK_STATUS") {
     chrome.storage.sync.get(["isFactCheckEnabled"], (result) => {
+      console.log("========== Fact Check Status Response ==========");
+      console.log(
+        "Response Body:",
+        JSON.stringify({ enabled: result.isFactCheckEnabled ?? true }, null, 2)
+      );
+      console.log("================================================");
       sendResponse({ enabled: result.isFactCheckEnabled ?? true });
     });
     return true; // 비동기 응답을 위해 true 반환
   } else if (request.type === "API_URL_UPDATED") {
     console.log("API URL updated:", request.apiUrl);
     sendResponse({ success: true });
+  } else if (request.type === "AUTO_FACT_CHECK_TEXT") {
+    // 자동 팩트 체크 요청 처리
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      console.error("No tab ID found for auto fact check");
+      sendResponse({ success: false });
+      return;
+    }
+
+    const { text, url } = request.data;
+
+    // 비동기 처리 시작
+    handleAutoFactCheck(text, url, tabId)
+      .then(() => {
+        console.log("========== Auto Fact Check Complete Response ==========");
+        console.log(
+          "Response Body:",
+          JSON.stringify({ success: true }, null, 2)
+        );
+        console.log("========================================================");
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error("========== Auto Fact Check Error Response ==========");
+        console.error(
+          "Response Body:",
+          JSON.stringify({ success: false, error: error.message }, null, 2)
+        );
+        console.error("=====================================================");
+        sendResponse({ success: false, error: error.message });
+      });
+
+    // 비동기 응답을 위해 true 반환 (중요!)
+    return true;
   }
 });
