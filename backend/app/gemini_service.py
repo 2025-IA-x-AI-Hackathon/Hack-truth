@@ -202,12 +202,12 @@ def get_verifier() -> GeminiVerifier:
         )
         thinking_budget = -1
 
-    temperature_str = os.environ.get("GEMINI_TEMPERATURE", "0.95")
+    temperature_str = os.environ.get("GEMINI_TEMPERATURE", "0.2")
     try:
         temperature = float(temperature_str)
     except ValueError:
-        logger.warning("Invalid GEMINI_TEMPERATURE='%s'. Falling back to 0.95.", temperature_str)
-        temperature = 0.95
+        logger.warning("Invalid GEMINI_TEMPERATURE='%s'. Falling back to 0.2.", temperature_str)
+        temperature = 0.2
 
     return GeminiVerifier(
         model=model,
