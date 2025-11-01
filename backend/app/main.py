@@ -11,8 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import File, UploadFile
 from .detectors.deepfake_detector import detect_deepfake_image_bytes, MODEL_NAME
 
-from .schemas import ImageVerificationResponse, ImageVerificationResult
-
+from .schemas import ImageVerificationResponse, ImageVerificationResult, VideoInput
+from .check_video import download_youtube_video, sample_frames, analyze_fft, analyze_motion, predict_ai_video
 from .gemini_service import (
     GeminiConfigurationError,
     GeminiVerificationError,
@@ -202,3 +202,20 @@ async def verify_image(
         result.confidence or 0.0,
     )
     return ImageVerificationResponse(result=result)
+
+@app.post("/video")
+def analyze_video(data: VideoInput):
+    try:
+        video_path = download_youtube_video(data.url)
+        frames = sample_frames(video_path, sample_rate=30)
+        fft_score = analyze_fft(frames)
+        motion_score = analyze_motion(frames)
+        result = predict_ai_video(fft_score, motion_score)
+
+        return {
+            "FFT_아티팩트_점수": fft_score,
+            "동작_패턴_점수": motion_score,
+            "판정_결과": result
+        }
+    except Exception as e:
+        return {"error": str(e)}
