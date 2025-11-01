@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import File, UploadFile
+from .detectors.deepfake_detector import detect_deepfake_image_bytes, MODEL_NAME
+
+from .schemas import ImageVerificationResponse, ImageVerificationResult
 
 from .gemini_service import (
     GeminiConfigurationError,
@@ -62,6 +66,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+ALLOWED_IMAGE_EXTENSION_LABEL = ", ".join(
+    ext.lstrip(".").upper() for ext in sorted(ALLOWED_IMAGE_EXTENSIONS)
+)
+
 
 def verifier_dependency() -> GeminiVerifier:
     return get_verifier()
@@ -73,8 +82,9 @@ async def health() -> dict[str, Any]:
     return {"status": "ok"}
 
 
+
 @app.post(
-    "/verify-text",
+    "/verify/text",
     response_model=VerificationResponse,
     tags=["verification"],
     status_code=status.HTTP_200_OK,
@@ -111,3 +121,84 @@ async def verify_text(
         len(result.urls),
     )
     return VerificationResponse(result=result, raw_model_response=raw_response)
+
+@app.post(
+    "/verify/image",
+    response_model=ImageVerificationResponse,
+    tags=["verification"],
+    status_code=status.HTTP_200_OK,
+)
+async def verify_image(
+    image: UploadFile = File(...),
+) -> ImageVerificationResponse:
+    """
+    이미지가 AI 생성 여부를 판별하는 엔드포인트.
+    multipart/form-data 형식으로 이미지를 업로드하면
+    딥페이크 식별 모델을 호출해 결과를 반환한다.
+    """
+    logger.debug("Received image verification request: filename=%s", image.filename)
+
+    filename = image.filename or "uploaded-image"
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        message = (
+            "지원하지 않는 이미지 확장자 유형입니다. "
+            f"지원 형식: {ALLOWED_IMAGE_EXTENSION_LABEL}."
+        )
+        logger.warning("Rejected image with unsupported extension: %s", filename)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    if image.content_type and not image.content_type.startswith("image/"):
+        logger.warning("Rejected non-image upload: %s (%s)", filename, image.content_type)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 파일만 업로드할 수 있습니다.",
+        )
+
+    try:
+        content = await image.read()
+    except Exception as exc:
+        logger.exception("Failed to read uploaded image: filename=%s", filename)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 데이터를 읽는 중 문제가 발생했습니다. 다시 시도해주세요.",
+        ) from exc
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="업로드된 이미지가 비어 있습니다. 다른 파일로 다시 시도해주세요.",
+        )
+
+    try:
+        det = await run_in_threadpool(detect_deepfake_image_bytes, content)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error while verifying image")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error while verifying the image.",
+        ) from exc
+
+    if not det.get("success", False):
+        error_message = det.get("error") or "이미지 판별 중 오류가 발생했습니다."
+        logger.warning("Image verification failed: %s", error_message)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+
+    result = ImageVerificationResult(
+        success=True,
+        verdict=det.get("verdict"),
+        confidence=det.get("confidence"),
+        fake_prob=det.get("fake_prob"),
+        real_prob=det.get("real_prob"),
+        error=None,
+        model_name=det.get("model_name") or MODEL_NAME,
+    )
+
+    logger.debug(
+        "Image verification succeeded: verdict=%s confidence=%.4f",
+        result.verdict,
+        result.confidence or 0.0,
+    )
+    return ImageVerificationResponse(result=result)
