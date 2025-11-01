@@ -118,11 +118,16 @@ const showUrlOverlay = (url, platform) => {
 
   document.body.appendChild(overlay);
 
+  // 백그라운드 감지 로딩 애니메이션 위치 조정
+  updateBackgroundDetectionLoadingPosition();
+
   // 닫기 버튼 이벤트 리스너
   const closeBtn = document.getElementById("closeUrlOverlay");
   closeBtn.addEventListener("click", () => {
     removeUrlOverlay();
     showPageButtonAgain();
+    // 닫힌 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   });
 };
 
@@ -148,9 +153,14 @@ const showFactCheckPopup = (data) => {
   document.body.appendChild(popup);
   console.log("Popup added to DOM");
 
+  // 백그라운드 감지 로딩 애니메이션 위치 조정
+  updateBackgroundDetectionLoadingPosition();
+
   // 자동으로 닫히도록 설정 (3초 후)
   setTimeout(() => {
     removeExistingPopup();
+    // 닫힌 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   }, 3000);
 };
 
@@ -219,11 +229,16 @@ const showLoadingOverlay = (message) => {
   `;
 
   document.body.appendChild(overlay);
+
+  // 백그라운드 감지 로딩 애니메이션 위치 조정
+  updateBackgroundDetectionLoadingPosition();
 };
 
 // 로딩 오버레이 제거
 const hideLoadingOverlay = () => {
   removeLoadingOverlay();
+  // 제거 후에도 위치 조정
+  updateBackgroundDetectionLoadingPosition();
 };
 
 const removeLoadingOverlay = () => {
@@ -448,8 +463,8 @@ const requestAutoFactCheck = async () => {
   console.log("Request Body:", JSON.stringify(requestData, null, 2));
   console.log("======================================================");
 
-  // 실시간 감지 오버레이 표시
-  showRealtimeDetectionOverlay();
+  // 백그라운드 감지 로딩 애니메이션 표시
+  showBackgroundDetectionLoading();
 
   // Background script에 자동 fact check 요청 전송
   chrome.runtime.sendMessage(
@@ -463,9 +478,11 @@ const requestAutoFactCheck = async () => {
       console.log("Response Body:", JSON.stringify(response, null, 2));
       console.log("=======================================================");
 
+      // 백그라운드 감지 로딩 애니메이션 제거
+      removeBackgroundDetectionLoading();
+
       if (chrome.runtime.lastError) {
         console.error("Auto fact check error:", chrome.runtime.lastError);
-        removeRealtimeDetectionOverlay();
         return;
       }
       // 응답 처리 (background.js에서 처리)
@@ -519,17 +536,24 @@ const showWarningOverlay = (isCurrentPage, url) => {
 
   document.body.appendChild(overlay);
 
+  // 백그라운드 감지 로딩 애니메이션 위치 조정
+  updateBackgroundDetectionLoadingPosition();
+
   // 닫기 버튼 이벤트 리스너
   const closeBtn = document.getElementById("closeWarningOverlay");
   if (closeBtn) {
     closeBtn.addEventListener("click", () => {
       removeWarningOverlay();
+      // 닫힌 후에도 위치 조정
+      updateBackgroundDetectionLoadingPosition();
     });
   }
 
   // 10초 후 자동 닫기
   setTimeout(() => {
     removeWarningOverlay();
+    // 닫힌 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   }, 10000);
 };
 
@@ -541,31 +565,6 @@ const removeWarningOverlay = () => {
   }
 };
 
-// 실시간 감지 오버레이 표시
-const showRealtimeDetectionOverlay = () => {
-  removeRealtimeDetectionOverlay();
-
-  const overlay = document.createElement("div");
-  overlay.id = "fact-check-realtime-detection-overlay";
-  overlay.className = "fact-check-realtime-detection-overlay";
-
-  overlay.innerHTML = `
-    <div class="realtime-detection-content">
-      <div class="realtime-detection-icon">🔍</div>
-      <div class="realtime-detection-message">
-        <strong>실시간 감지</strong>
-        <p>현재 보여지는 정보에서 fact check를 요청합니다.</p>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
-  setTimeout(() => {
-    removeRealtimeDetectionOverlay();
-  }, 3000);
-};
-
 // 실시간 감지 오버레이 제거
 const removeRealtimeDetectionOverlay = () => {
   const overlay = document.getElementById(
@@ -574,6 +573,87 @@ const removeRealtimeDetectionOverlay = () => {
   if (overlay) {
     overlay.remove();
   }
+};
+
+// 백그라운드 감지 로딩 애니메이션 표시
+const showBackgroundDetectionLoading = () => {
+  removeBackgroundDetectionLoading();
+
+  const loadingOverlay = document.createElement("div");
+  loadingOverlay.id = "fact-check-background-detection-loading";
+  loadingOverlay.className = "fact-check-background-detection-loading";
+
+  loadingOverlay.innerHTML = `
+    <div class="background-detection-loading-content">
+      <div class="background-detection-loading-spinner"></div>
+      <div class="background-detection-loading-tooltip">
+        실시간 팩트체크 감지중입니다
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(loadingOverlay);
+
+  // 다른 오버레이가 있는지 확인하고 위치 조정
+  updateBackgroundDetectionLoadingPosition();
+};
+
+// 백그라운드 감지 로딩 애니메이션 제거
+const removeBackgroundDetectionLoading = () => {
+  const loadingOverlay = document.getElementById(
+    "fact-check-background-detection-loading"
+  );
+  if (loadingOverlay) {
+    loadingOverlay.remove();
+  }
+};
+
+// 백그라운드 감지 로딩 애니메이션 위치 조정
+const updateBackgroundDetectionLoadingPosition = () => {
+  const loadingOverlay = document.getElementById(
+    "fact-check-background-detection-loading"
+  );
+  if (!loadingOverlay) {
+    return;
+  }
+
+  const isOverlayVisible = (overlay) => {
+    if (!overlay) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(overlay);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      parseFloat(style.opacity) === 0
+    ) {
+      return false;
+    }
+
+    const rect = overlay.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+
+  // 다른 오버레이들의 높이를 계산
+  let offset = 0;
+  const overlays = [
+    document.getElementById("fact-check-popup"),
+    document.getElementById("fact-check-url-overlay"),
+    document.getElementById("fact-check-loading-overlay"),
+    document.getElementById("fact-check-warning-overlay"),
+    document.getElementById("fact-check-api-url-warning-overlay"),
+    document.getElementById("fact-check-realtime-detection-overlay"),
+  ];
+
+  overlays.forEach((overlay) => {
+    if (isOverlayVisible(overlay)) {
+      const rect = overlay.getBoundingClientRect();
+      offset += rect.height + 10; // 오버레이 높이 + 간격
+    }
+  });
+
+  loadingOverlay.style.bottom = `${20 + offset}px`;
 };
 
 // API URL 경고 오버레이 표시
@@ -597,17 +677,24 @@ const showApiUrlWarningOverlay = (message) => {
 
   document.body.appendChild(overlay);
 
+  // 백그라운드 감지 로딩 애니메이션 위치 조정
+  updateBackgroundDetectionLoadingPosition();
+
   // 닫기 버튼 이벤트 리스너
   const closeBtn = document.getElementById("closeApiUrlWarningOverlay");
   if (closeBtn) {
     closeBtn.addEventListener("click", () => {
       removeApiUrlWarningOverlay();
+      // 닫힌 후에도 위치 조정
+      updateBackgroundDetectionLoadingPosition();
     });
   }
 
   // 10초 후 자동 닫기
   setTimeout(() => {
     removeApiUrlWarningOverlay();
+    // 닫힌 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   }, 10000);
 };
 
@@ -633,9 +720,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "SHOW_RESULT_MODAL") {
     hideLoadingOverlay();
     showResultModal(request.data);
+    // 결과 모달 표시 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   } else if (request.type === "SHOW_ERROR") {
     hideLoadingOverlay();
     showErrorModal(request.data);
+    // 에러 모달 표시 후에도 위치 조정
+    updateBackgroundDetectionLoadingPosition();
   } else if (request.type === "SHOW_WARNING_OVERLAY") {
     const { isCurrentPage, url } = request.data;
     showWarningOverlay(isCurrentPage, url);

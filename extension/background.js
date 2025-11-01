@@ -481,16 +481,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const { text, url } = request.data;
 
     // 비동기 처리 시작
-    handleAutoFactCheck(text, url, tabId)
-      .then(() => {
-        console.log("========== Auto Fact Check Complete Response ==========");
-        console.log(
-          "Response Body:",
-          JSON.stringify({ success: true }, null, 2)
-        );
-        console.log("========================================================");
-        sendResponse({ success: true });
-      })
+  handleAutoFactCheck(text, url, tabId)
+    .then((responseData) => {
+      console.log("========== Auto Fact Check Complete Response ==========");
+      console.log(
+        "Response Body:",
+        JSON.stringify({ success: true, data: responseData }, null, 2)
+      );
+      console.log("========================================================");
+      sendResponse({ success: true, data: responseData });
+    })
       .catch((error) => {
         console.error("========== Auto Fact Check Error Response ==========");
         console.error(
