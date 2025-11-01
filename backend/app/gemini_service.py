@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from functools import lru_cache
+from threading import Lock
 from typing import Any, Optional, Tuple
 
 from google import genai
@@ -56,6 +57,71 @@ class GeminiVerificationError(RuntimeError):
     """Raised when the Gemini API response cannot be parsed."""
 
 
+def _discover_gemini_api_keys() -> list[str]:
+    """Return the ordered list of Gemini API keys configured via environment variables."""
+    keys: list[str] = []
+
+    multi_value = os.environ.get("GEMINI_API_KEYS")
+    if multi_value:
+        candidates = re.split(r"[\s,]+", multi_value)
+        keys.extend(candidate.strip() for candidate in candidates if candidate.strip())
+
+    index = 1
+    while True:
+        sequential_key = os.environ.get(f"GEMINI_API_KEY_{index}")
+        if not sequential_key:
+            break
+        keys.append(sequential_key.strip())
+        index += 1
+
+    single_key = os.environ.get("GEMINI_API_KEY")
+    if single_key:
+        keys.append(single_key.strip())
+
+    # Preserve order while removing duplicates and empty entries.
+    unique_keys: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        if not key or key in seen:
+            continue
+        unique_keys.append(key)
+        seen.add(key)
+
+    return unique_keys
+
+
+class GeminiClientPool:
+    """Round-robin pool of Gemini clients backed by multiple API keys."""
+
+    def __init__(self, api_keys: list[str]) -> None:
+        filtered_keys = [key.strip() for key in api_keys if key and key.strip()]
+        if not filtered_keys:
+            raise GeminiConfigurationError(
+                "Environment variable GEMINI_API_KEYS (or GEMINI_API_KEY) must provide at least one API key."
+            )
+
+        self._keys = filtered_keys
+        self._clients: dict[str, genai.Client] = {}
+        self._lock = Lock()
+        self._index = 0
+
+    def acquire_client(self) -> genai.Client:
+        with self._lock:
+            key = self._keys[self._index]
+            self._index = (self._index + 1) % len(self._keys)
+
+            client = self._clients.get(key)
+            if client is None:
+                client = genai.Client(api_key=key)
+                self._clients[key] = client
+
+        return client
+
+    @property
+    def size(self) -> int:
+        return len(self._keys)
+
+
 class GeminiVerifier:
     """Thin wrapper around the google-genai client for news verification."""
 
@@ -68,14 +134,18 @@ class GeminiVerifier:
         thinking_budget: Optional[int] = -1,
         system_instruction: Optional[str] = None,
     ) -> None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise GeminiConfigurationError(
-                "Environment variable GEMINI_API_KEY is required to call the Gemini API."
-            )
+        api_keys = _discover_gemini_api_keys()
+        self._client_pool = GeminiClientPool(api_keys)
 
-        logger.debug("Initializing Gemini client for model '%s'", model)
-        self._client = genai.Client(api_key=api_key)
+        if self._client_pool.size > 1:
+            logger.info(
+                "Initializing Gemini client pool for model '%s' with %d API keys",
+                model,
+                self._client_pool.size,
+            )
+        else:
+            logger.debug("Initializing Gemini client for model '%s'", model)
+
         self._model = model
 
         tools = []
@@ -120,7 +190,8 @@ class GeminiVerifier:
         ]
 
         try:
-            response = self._client.models.generate_content(
+            client = self._client_pool.acquire_client()
+            response = client.models.generate_content(
                 model=self._model,
                 contents=contents,
                 config=self._generate_config,
