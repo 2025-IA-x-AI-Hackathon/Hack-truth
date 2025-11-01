@@ -2,3 +2,7 @@ fastapi>=0.120.0,<0.121.0
 uvicorn[standard]>=0.30.0
 google-genai>=1.47.0
 python-dotenv>=1.0.1
+transformers>=4.57.1
+pillow>=11.3.0
+torch>=2.8.0
+python-multipart>=0.0.20
