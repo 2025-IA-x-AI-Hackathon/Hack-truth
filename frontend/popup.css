@@ -1,0 +1,276 @@
+/* Popup Styles */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  width: 400px;
+  background: #f8f9fa;
+}
+
+.popup-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 500px;
+}
+
+.header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  font-size: 32px;
+}
+
+.logo h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.content {
+  padding: 20px;
+  flex: 1;
+}
+
+.description h2 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.description > p {
+  margin: 0 0 20px 0;
+  color: #666;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.features,
+.usage {
+  margin-bottom: 24px;
+}
+
+.features h3,
+.usage h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.features ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.features li {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.feature-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.features li div {
+  flex: 1;
+}
+
+.features strong {
+  display: block;
+  color: #333;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.features p {
+  margin: 0;
+  color: #666;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.usage ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.usage li {
+  margin-bottom: 8px;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.settings {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.setting-info {
+  flex: 1;
+}
+
+.setting-info strong {
+  display: block;
+  color: #333;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.setting-info p {
+  margin: 0;
+  color: #666;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 28px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+.footer {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.footer p {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.version {
+  color: #999 !important;
+  font-size: 11px !important;
+}
+
+/* API URL 설정 스타일 */
+.api-url-setting {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.api-url-input-container {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.api-url-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: monospace;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.api-url-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.save-api-url-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.save-api-url-btn:hover {
+  transform: translateY(-2px);
+}
+
+.api-url-status {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  min-height: 16px;
+}
+
+.api-url-status.success {
+  color: #28a745;
+}
+
+.api-url-status.error {
+  color: #dc3545;
+}
