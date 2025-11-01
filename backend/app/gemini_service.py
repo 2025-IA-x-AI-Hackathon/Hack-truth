@@ -1,8 +1,9 @@
 import json
 import logging
 import os
+import re
 from functools import lru_cache
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from google import genai
 from google.genai import types
@@ -143,11 +144,16 @@ class GeminiVerifier:
             raise GeminiVerificationError("Gemini response did not include any text payload.")
 
         logger.debug("Parsing raw Gemini response text: %s", raw_text)
-        try:
-            parsed_json = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
-            logger.exception("Gemini returned invalid JSON")
-            raise GeminiVerificationError("Gemini returned invalid JSON payload.") from exc
+
+        parsed_json = self._extract_json_from_code_block(raw_text)
+        if parsed_json is not None:
+            print("Gemini JSON extracted from code block:", parsed_json)
+        else:
+            try:
+                parsed_json = json.loads(raw_text)
+            except json.JSONDecodeError as exc:
+                logger.exception("Gemini returned invalid JSON")
+                raise GeminiVerificationError("Gemini returned invalid JSON payload.") from exc
 
         try:
             result = self._coerce_verification_result(parsed_json)
@@ -164,6 +170,21 @@ class GeminiVerifier:
         if isinstance(candidate, VerificationResult):
             return candidate
         return VerificationResult.model_validate(candidate)
+
+    @staticmethod
+    def _extract_json_from_code_block(text: str) -> Optional[Any]:
+        """Return JSON parsed from a ```json``` fence if present, else None."""
+        pattern = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
+        for match in pattern.finditer(text):
+            candidate = match.group(1).strip()
+            if not candidate:
+                continue
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                logger.debug("Failed to parse JSON code block candidate: %s", candidate)
+                continue
+        return None
 
 
 @lru_cache(maxsize=1)
