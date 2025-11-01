@@ -185,7 +185,7 @@ const showFactCheckPopup = (data) => {
   removeExistingPopup();
 
   // 팝업 생성
-  const popup = createPopup(data);
+  const popup = createPopup(data);``
   document.body.appendChild(popup);
   console.log("Popup added to DOM");
 
@@ -653,26 +653,29 @@ const showImageResultModal = (data) => {
   modal.className = "fact-check-result-modal image";
 
   const result = data?.result || {};
-  const success = !!result.success;
-  const verdictText = result.verdict
-    ? result.verdict
-    : success
-      ? "판단 결과를 가져오지 못했습니다."
-      : "분석이 완료되지 않았습니다.";
+  const rawModelResponse =
+    typeof data?.rawModelResponse === "string" ? data.rawModelResponse : null;
 
-  const summaryText = success
-    ? `이 이미지는 ${verdictText}`
-    : result.error
-      ? `분석에 실패했습니다: ${result.error}`
-      : "이미지 분석 결과를 불러오지 못했습니다.";
+  const rawFakeValue =
+    typeof result.fake === "string" ? result.fake.trim() : "";
+  const fakeDisplay = rawFakeValue || "알 수 없음";
+  const normalizedFake = rawFakeValue.toLowerCase();
 
-  const confidenceValue =
-    typeof result.confidence === "number" ? `${result.confidence}%` : "-";
-  const fakeProbValue =
-    typeof result.fake_prob === "number" ? `${result.fake_prob}%` : "-";
-  const realProbValue =
-    typeof result.real_prob === "number" ? `${result.real_prob}%` : "-";
-  const modelName = result.model_name || "모델 정보 없음";
+  let defaultSummary;
+  if (["true", "fake", "yes"].includes(normalizedFake)) {
+    defaultSummary = "이 이미지는 딥페이크로 의심됩니다.";
+  } else if (["false", "real", "no"].includes(normalizedFake)) {
+    defaultSummary = "이 이미지는 진짜로 판별되었습니다.";
+  } else if (rawFakeValue) {
+    defaultSummary = `모델이 '${rawFakeValue}' 상태로 판정했습니다.`;
+  } else {
+    defaultSummary = "이미지 판별 결과를 확인할 수 없습니다.";
+  }
+
+  const reasonText =
+    typeof result.reason === "string" && result.reason.trim().length > 0
+      ? result.reason.trim()
+      : defaultSummary;
 
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
@@ -698,39 +701,26 @@ const showImageResultModal = (data) => {
         }
 
         <div class="result-section">
-          <h3>분석 요약</h3>
-          <p class="image-result-summary">${escapeHtml(summaryText)}</p>
-        </div>
-
-        <div class="result-section">
-          <h3>판단 지표</h3>
+          <h3>모델 판정</h3>
           <div class="image-score-grid">
             <div class="image-score-card">
-              <span class="score-label">Confidence</span>
-              <span class="score-value">${escapeHtml(confidenceValue)}</span>
-            </div>
-            <div class="image-score-card">
-              <span class="score-label">Fake Prob</span>
-              <span class="score-value">${escapeHtml(fakeProbValue)}</span>
-            </div>
-            <div class="image-score-card">
-              <span class="score-label">Real Prob</span>
-              <span class="score-value">${escapeHtml(realProbValue)}</span>
+              <span class="score-label">Fake 여부</span>
+              <span class="score-value">${escapeHtml(fakeDisplay)}</span>
             </div>
           </div>
         </div>
 
         <div class="result-section">
-          <h3>모델 정보</h3>
-          <p class="image-model-name">${escapeHtml(modelName)}</p>
+          <h3>분석 요약</h3>
+          <p class="image-result-summary">${escapeHtml(reasonText)}</p>
         </div>
 
         ${
-          !success && result.error
+          rawModelResponse
             ? `
         <div class="result-section">
-          <h3>오류 상세</h3>
-          <p class="image-error-text">${escapeHtml(result.error)}</p>
+          <h3>Raw Model Response</h3>
+          <pre class="image-raw-response">${escapeHtml(rawModelResponse)}</pre>
         </div>
         `
             : ""
@@ -768,7 +758,7 @@ const applyBackgroundDetectionSetting = (enabled) => {
   } else {
     console.log("Background detection enabled via settings");
     hasCheckedCurrentPage = false;
-    scheduleAutoFactCheck(500);
+    scheduleAutoFactCheck(2000);
   }
 };
 
