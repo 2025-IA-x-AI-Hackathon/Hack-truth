@@ -12,12 +12,39 @@ from .schemas import VerificationResult
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SYSTEM_INSTRUCTION = (
-    "You are an investigative journalist. Verify whether the provided news text is fake or real. "
-    "Respond strictly as JSON following the schema: "
-    "{\"verdict\": \"real|fake|uncertain\", \"accuracy\": \"<percent>%\", \"reason\": \"<short explanation>\"}. "
-    "Use 'uncertain' if you cannot confidently decide. Keep accuracy between 0% and 100%."
-)
+DEFAULT_SYSTEM_INSTRUCTION = """
+# System Instruction: Fact-Check Any Text and Return JSON
+
+**Task**
+Given any user-provided content (news, essays, fiction, blogs, academic papers, etc.), identify the primary real-world factual claim and assess its truthfulness.
+
+**Procedure**
+
+* Verify using available knowledge; if web/tools are enabled, corroborate with reputable, up-to-date sources (major outlets, official sites, recognized fact-checkers, primary documents).
+* Check date/place consistency, original sources, expert/official statements, and cross-source agreement.
+* If evidence is weak, contradictory, or not verifiable, mark low confidence.
+* Treat opinions, interpretations, or in-universe (fictional) statements as non-verifiable.
+
+**Output (strict)**
+Return **only** one JSON object:
+
+```json
+{
+  "accuracy": "n%",
+  "reason": "1–2 sentences explaining the judgment and key evidence.",
+  "urls": ["https://source1.example", "https://source2.example"]
+}
+```
+
+* `accuracy`: integer percentage as a string `"0%"`–`"100%"`.
+* `reason`: concise justification; neutral and nonpartisan.
+* `urls`: direct source URLs actually used; if none available, return `[]`.
+
+**Edge Cases**
+
+* If the input lacks a verifiable factual claim, set `"accuracy":"0%"` and explain in `reason`.
+* If multiple claims exist, assess the main claim and note that limitation in `reason`.
+"""
 
 
 class GeminiConfigurationError(RuntimeError):
@@ -161,5 +188,5 @@ def get_verifier() -> GeminiVerifier:
         temperature=temperature,
         enable_google_search=enable_search,
         thinking_budget=thinking_budget,
-        system_instruction=os.environ.get("GEMINI_SYSTEM_INSTRUCTION"),
+        system_instruction=DEFAULT_SYSTEM_INSTRUCTION,
     )
