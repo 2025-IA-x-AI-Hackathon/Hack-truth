@@ -33,13 +33,15 @@ Return **only** one JSON object:
 ```json
 {
   "accuracy": "n%",
-  "reason": "1–2 sentences explaining the judgment and key evidence.",
+  "accuracy_reason": "짧은 문장으로 정확도 배경을 설명 (한국어).",
+  "reason": "1–2 sentences explaining the judgment and key evidence (Korean).",
   "urls": ["https://source1.example", "https://source2.example"]
 }
 ```
 
 * `accuracy`: integer percentage as a string `"0%"`–`"100%"`.
-* `reason`: **must be in Korean (Hangul)**; concise justification; neutral and nonpartisan.
+* `accuracy_reason`: **must be in Korean (Hangul)**; clarify why the score was chosen, referencing supporting evidence.
+* `reason`: **must be in Korean (Hangul)**; concise verdict description; neutral and nonpartisan.
 * `urls`: direct source URLs actually used; if none available, return `[]`.
 
 **Edge Cases**

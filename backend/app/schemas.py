@@ -1,4 +1,5 @@
 from typing import List, Optional
+from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
 # ===== 텍스트 판별용 (기존 유지) =====
@@ -13,6 +14,10 @@ class VerificationResult(BaseModel):
         ...,
         description="Model confidence expressed as a percentage string, e.g. '82%'.",
     )
+    accuracy_reason: str = Field(
+        ...,
+        description="Short Korean explanation describing why the given accuracy score was selected.",
+    )
     reason: str = Field(
         ...,
         description="Short explanation for the assessment.",
@@ -26,6 +31,10 @@ class VerificationResult(BaseModel):
 class VerificationResponse(BaseModel):
     """HTTP response returned to the frontend."""
     result: VerificationResult
+    record_id: UUID = Field(
+        ...,
+        description="Primary key of the persisted verification record.",
+    )
     raw_model_response: Optional[str] = Field(
         default=None,
         description="Raw JSON string returned by model, preserved for debugging.",

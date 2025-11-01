@@ -22,6 +22,7 @@ from .gemini_service import (
     get_verifier,
 )
 from .schemas import VerificationRequest, VerificationResponse, VerificationResult
+from .db import init_db_pool, close_db_pool, insert_verification_record
 
 
 def _load_env() -> bool:
@@ -58,6 +59,20 @@ app = FastAPI(
     version="0.1.0",
     description="FastAPI backend that checks if news is fake using Gemini.",
 )
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    try:
+        await init_db_pool()
+    except Exception as exc:
+        logger.exception("Failed to initialize database connection pool")
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    await close_db_pool()
 
 # Allow all origins to simplify hackathon integration; tighten later if needed.
 app.add_middleware(
@@ -145,12 +160,33 @@ async def verify_text(
         logger.warning("Verification result was not a VerificationResult instance: %s", result)
         result = VerificationResult.model_validate(result)
 
+    try:
+        record_id = await insert_verification_record(
+            input_text=payload.text,
+            accuracy=result.accuracy,
+            accuracy_reason=result.accuracy_reason,
+            reason=result.reason,
+            urls=result.urls,
+            raw_response=raw_response,
+        )
+    except Exception as exc:
+        logger.exception("Failed to persist verification result")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist verification result.",
+        ) from exc
+
     logger.debug(
-        "Verification succeeded with accuracy=%s urls=%d",
+        "Verification succeeded with accuracy=%s urls=%d record_id=%s",
         result.accuracy,
         len(result.urls),
+        record_id,
     )
-    return VerificationResponse(result=result, raw_model_response=raw_response)
+    return VerificationResponse(
+        result=result,
+        record_id=record_id,
+        raw_model_response=raw_response,
+    )
 
 @app.post(
     "/verify/image",
