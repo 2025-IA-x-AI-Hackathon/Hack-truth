@@ -14,15 +14,35 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .detectors.deepfake_detector import detect_deepfake_image_bytes, MODEL_NAME
 
-from .schemas import ImageVerificationResponse, ImageVerificationResult, VideoRequest, VideoResponse, ImageVerificationRequest
-from .check_video import download_youtube_video, sample_frames, analyze_fft, analyze_motion, predict_ai_video, safe_float
+from .schemas import (
+    GeminiImageVerdict,
+    GeminiImageVerificationResponse,
+    ImageVerificationRequest,
+    ImageVerificationResponse,
+    ImageVerificationResult,
+    VerificationRecordDetail,
+    VerificationRequest,
+    VerificationResponse,
+    VerificationResult,
+    VideoRequest,
+    VideoResponse,
+)
+from .check_video import (
+    analyze_fft,
+    analyze_motion,
+    download_youtube_video,
+    predict_ai_video,
+    sample_frames,
+    safe_float,
+)
 from .gemini_service import (
     GeminiConfigurationError,
+    GeminiImageVerifier,
     GeminiVerificationError,
     GeminiVerifier,
+    get_image_verifier,
     get_verifier,
 )
-from .schemas import VerificationRequest, VerificationResponse, VerificationResult, VerificationRecordDetail
 from .db import init_db_pool, close_db_pool, insert_verification_record, fetch_verification_record
 
 
@@ -117,11 +137,89 @@ def verifier_dependency() -> GeminiVerifier:
     return get_verifier()
 
 
+def image_verifier_dependency() -> GeminiImageVerifier:
+    return get_image_verifier()
+
+
 def _build_image_request_headers(parsed_url: ParseResult) -> dict[str, str]:
     headers = DEFAULT_IMAGE_REQUEST_HEADERS.copy()
     if parsed_url.scheme and parsed_url.netloc:
         headers["Referer"] = f"{parsed_url.scheme}://{parsed_url.netloc}/"
     return headers
+
+
+async def _download_image_bytes(image_url: str) -> tuple[bytes, str]:
+    parsed_url = urlparse(image_url)
+    raw_path = parsed_url.path
+    normalized_path = raw_path.split("!")[0]
+    extension = Path(normalized_path).suffix.lower()
+
+    if extension and extension not in ALLOWED_IMAGE_EXTENSIONS:
+        message = (
+            "지원하지 않는 이미지 확장자 유형입니다. "
+            f"지원 형식: {ALLOWED_IMAGE_EXTENSION_LABEL}."
+        )
+        logger.warning("Rejected image with unsupported extension: %s", image_url)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    request_headers = _build_image_request_headers(parsed_url)
+
+    try:
+        transport = httpx.AsyncHTTPTransport(retries=DEFAULT_IMAGE_RETRIES)
+        async with httpx.AsyncClient(
+            timeout=DEFAULT_IMAGE_TIMEOUT,
+            follow_redirects=True,
+            headers=request_headers,
+            transport=transport,
+        ) as client:
+            response = await client.get(image_url)
+    except httpx.InvalidURL:
+        logger.warning("Invalid image URL provided: %s", image_url)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="유효한 이미지 URL이 아닙니다.",
+        )
+    except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+        logger.warning("Failed to fetch image: %s (%s)", image_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 URL에 연결할 수 없습니다. 주소를 확인하고 다시 시도해주세요.",
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("HTTP error while fetching image: %s (%s)", image_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 URL을 불러오는 중 오류가 발생했습니다.",
+        )
+
+    if response.status_code >= 400:
+        logger.warning(
+            "Image URL responded with status %s: %s",
+            response.status_code,
+            image_url,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 URL에서 파일을 가져오지 못했습니다. URL 접근 권한을 확인해주세요.",
+        )
+
+    content_type = response.headers.get("content-type", "").split(";")[0].lower()
+    if content_type and content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        message = (
+            "지원하지 않는 이미지 MIME 유형입니다. "
+            f"지원 형식: {ALLOWED_IMAGE_CONTENT_TYPE_LABEL}."
+        )
+        logger.warning("Rejected image with unsupported MIME type %s: %s", content_type, image_url)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    content = response.content
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미지 데이터를 내려받지 못했습니다. 다른 URL로 다시 시도해주세요.",
+        )
+
+    return content, (content_type or "image/jpeg")
 
 
 @app.get("/health", tags=["meta"])
@@ -273,74 +371,16 @@ async def verify_image(
     image_url = str(payload.image_url)
     logger.debug("Received image verification request: url=%s", image_url)
 
-    parsed_url = urlparse(image_url)
-    raw_path = parsed_url.path
-    normalized_path = raw_path.split("!")[0]
-    extension = Path(normalized_path).suffix.lower()
-    if extension and extension not in ALLOWED_IMAGE_EXTENSIONS:
-        message = (
-            "지원하지 않는 이미지 확장자 유형입니다. "
-            f"지원 형식: {ALLOWED_IMAGE_EXTENSION_LABEL}."
-        )
-        logger.warning("Rejected image with unsupported extension: %s", image_url)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-
-    request_headers = _build_image_request_headers(parsed_url)
-
     try:
-        transport = httpx.AsyncHTTPTransport(retries=DEFAULT_IMAGE_RETRIES)
-        async with httpx.AsyncClient(
-            timeout=DEFAULT_IMAGE_TIMEOUT,
-            follow_redirects=True,
-            headers=request_headers,
-            transport=transport,
-        ) as client:
-            response = await client.get(image_url)
-    except httpx.InvalidURL:
-        logger.warning("Invalid image URL provided: %s", image_url)
+        content, _ = await _download_image_bytes(image_url)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error while downloading image for detector")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="유효한 이미지 URL이 아닙니다.",
-        )
-    except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
-        logger.warning("Failed to fetch image: %s (%s)", image_url, exc)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미지 URL에 연결할 수 없습니다. 주소를 확인하고 다시 시도해주세요.",
-        )
-    except httpx.HTTPError as exc:
-        logger.warning("HTTP error while fetching image: %s (%s)", image_url, exc)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미지 URL을 불러오는 중 오류가 발생했습니다.",
-        )
-
-    if response.status_code >= 400:
-        logger.warning(
-            "Image URL responded with status %s: %s",
-            response.status_code,
-            image_url,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미지 URL에서 파일을 가져오지 못했습니다. URL 접근 권한을 확인해주세요.",
-        )
-
-    content_type = response.headers.get("content-type", "").split(";")[0].lower()
-    if content_type and content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
-        message = (
-            "지원하지 않는 이미지 MIME 유형입니다. "
-            f"지원 형식: {ALLOWED_IMAGE_CONTENT_TYPE_LABEL}."
-        )
-        logger.warning("Rejected image with unsupported MIME type %s: %s", content_type, image_url)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-
-    content = response.content
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미지 데이터를 내려받지 못했습니다. 다른 URL로 다시 시도해주세요.",
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="이미지를 내려받는 중 예기치 못한 오류가 발생했습니다.",
+        ) from exc
 
     try:
         det = await run_in_threadpool(detect_deepfake_image_bytes, content)
@@ -374,6 +414,83 @@ async def verify_image(
         result.confidence or 0.0,
     )
     return ImageVerificationResponse(result=result)
+
+
+@app.post(
+    "/verify/image-gemini",
+    response_model=GeminiImageVerificationResponse,
+    tags=["verification"],
+    status_code=status.HTTP_200_OK,
+)
+async def verify_image_with_gemini(
+    payload: ImageVerificationRequest,
+    verifier: GeminiImageVerifier = Depends(image_verifier_dependency),
+) -> GeminiImageVerificationResponse:
+    """이미지를 Gemini 멀티모달 모델에 전달해 구조화된 판별 결과를 반환한다."""
+
+    image_url = str(payload.image_url)
+    logger.debug("Received Gemini image verification request: url=%s", image_url)
+
+    try:
+        image_bytes, mime_type = await _download_image_bytes(image_url)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error while downloading image for Gemini")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="이미지를 내려받는 중 예기치 못한 오류가 발생했습니다.",
+        ) from exc
+
+    result: Optional[GeminiImageVerdict] = None
+    raw_response: Optional[str] = None
+
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            result, raw_response = await run_in_threadpool(
+                verifier.verify,
+                image_bytes,
+                mime_type,
+            )
+            break
+        except GeminiConfigurationError as exc:
+            logger.exception("Gemini image configuration error on attempt %d", attempt)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GeminiVerificationError as exc:
+            logger.warning(
+                "Gemini image verification attempt %d/%d failed: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc,
+            )
+            if attempt == GEMINI_MAX_ATTEMPTS:
+                logger.exception("Gemini image verification failed after retries")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Gemini 이미지 판별이 여러 차례 시도 후 실패했습니다.",
+                ) from exc
+        except Exception as exc:  # noqa: BLE001 - want full traceback in logs
+            logger.exception("Unexpected Gemini image verification error on attempt %d", attempt)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="이미지를 판별하는 중 예기치 못한 오류가 발생했습니다.",
+            ) from exc
+
+    if result is None:
+        logger.error(
+            "Gemini image verification did not produce a result after %d attempts",
+            GEMINI_MAX_ATTEMPTS,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Gemini 이미지 판별이 결과를 생성하지 못했습니다.",
+        )
+
+    if raw_response is None:
+        logger.warning("Gemini image verification returned no raw response payload")
+
+    return GeminiImageVerificationResponse(result=result, raw_model_response=raw_response)
+
 
 @app.post(
         "/verify/video",
