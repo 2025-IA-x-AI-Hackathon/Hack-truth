@@ -2,8 +2,6 @@
 
 텍스트와 이미지의 팩트 체크를 도와주는 크롬 확장 프로그램입니다.
 
-> ⚠️ **주의**: 이것은 기능 테스트 버전입니다. 실제 AI 분석 기능은 향후 API 연동 후 구현됩니다.
-
 ## 📋 목차
 
 - [주요 기능](#주요-기능)
@@ -33,20 +31,6 @@
 - 팩트 체크 기능 활성화/비활성화 토글
 
 ## 🚀 설치 방법
-
-### Step 1: 프로젝트 준비
-
-1. 이 프로젝트 폴더를 준비합니다.
-2. `icons` 폴더에 필요한 아이콘 파일을 추가합니다.
-
-   - icon16.png (16x16px)
-   - icon32.png (32x32px)
-   - icon48.png (48x48px)
-   - icon128.png (128x128px)
-
-   > 아이콘 생성 방법은 [`icons/README.md`](./icons/README.md)를 참조하세요.
-
-### Step 2: Chrome에 확장 프로그램 로드
 
 1. **Chrome 브라우저를 엽니다.**
 
@@ -83,7 +67,8 @@
 2. 선택한 텍스트에서 **우클릭**합니다.
 3. 컨텍스트 메뉴에서 **"Fact Check (텍스트)"**를 선택합니다.
 4. 팝업 창에서 결과를 확인합니다:
-   - 사실 가능성 퍼센테ージ
+   - 사실 가능성 퍼센트
+   - 상세 내용
    - 참고할 수 있는 레퍼런스 링크
 
 ### 이미지 팩트 체크
@@ -93,7 +78,7 @@
 3. 컨텍스트 메뉴에서 **"Fact Check (이미지)"**를 선택합니다.
 4. 팝업 창에서 결과를 확인합니다:
    - AI 생성 여부
-   - 신뢰도 퍼센테ージ
+   - 신뢰도 퍼센트
    - 분석 세부사항
 
 ### 설정 관리
@@ -102,6 +87,7 @@
 2. 팝업 창에서:
    - 확장 프로그램 소개 확인
    - "팩트 체크 활성화" 토글로 기능 ON/OFF
+   - 백그라운드 감지 ON/OFF 가능
 
 ## 📁 프로젝트 구조
 
@@ -157,50 +143,6 @@ extension-fact-check-1/
 3. "Fact Check" 확장 프로그램 카드에서 **새로고침 버튼** (🔄)을 클릭합니다.
 4. 웹페이지를 새로고침하여 변경사항을 확인합니다.
 
-### 디버깅 방법
-
-#### Background Script 디버깅
-
-1. `chrome://extensions/` 페이지에서
-2. "Fact Check" 카드의 "Service Worker" 링크 클릭
-3. DevTools에서 로그 확인
-
-#### Content Script 디버깅
-
-1. 웹페이지에서 F12를 눌러 DevTools 열기
-2. Console 탭에서 로그 확인
-3. Sources 탭에서 `content.js` 찾아 breakpoint 설정 가능
-
-#### Popup 디버깅
-
-1. 팝업을 연 상태에서 팝업 내부에서 우클릭
-2. "검사" 선택하여 DevTools 열기
-
-### 향후 개발 계획
-
-현재는 테스트 버전으로 간단한 로직만 구현되어 있습니다. 실제 서비스를 위해서는:
-
-1. **AI API 연동**
-
-   - OpenAI API, Google Cloud Vision API 등
-   - 텍스트: GPT를 이용한 팩트 체크
-   - 이미지: AI 생성 여부 감지 모델 연동
-
-2. **데이터베이스 연동**
-
-   - 팩트 체크 히스토리 저장
-   - 사용자 피드백 수집
-
-3. **성능 최적화**
-
-   - 캐싱 메커니즘
-   - 비동기 처리 개선
-
-4. **UI/UX 개선**
-   - 로딩 애니메이션
-   - 더 상세한 분석 결과
-   - 다크 모드 지원
-
 ## 🔗 참고 자료
 
 ### Chrome Extension 개발
@@ -214,25 +156,6 @@ extension-fact-check-1/
 ### 코드 품질
 
 - [Frontend Fundamentals - Code Quality](https://frontend-fundamentals.com/code-quality/)
-
-### 팩트 체크 리소스
-
-- [FactCheck.org](https://www.factcheck.org)
-- [Snopes](https://www.snopes.com)
-- [Google Fact Check Tools](https://toolbox.google.com/factcheck/explorer)
-
-### AI 이미지 감지
-
-- [AI or Not - Image Detector](https://www.aiornot.com)
-- [Hugging Face - AI Image Detection Models](https://huggingface.co/models?pipeline_tag=image-classification)
-
-## 📝 라이선스
-
-이 프로젝트는 교육 및 테스트 목적으로 제작되었습니다.
-
-## 🤝 기여
-
-버그 리포트나 기능 제안은 언제든 환영합니다!
 
 ---
 
