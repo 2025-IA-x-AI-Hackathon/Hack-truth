@@ -376,7 +376,7 @@ async def verify_image(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Unexpected error while downloading image for detector")
+        logger.exception("Unexpected error while downloading image for detector: %s", image_url)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="이미지를 내려받는 중 예기치 못한 오류가 발생했습니다.",
