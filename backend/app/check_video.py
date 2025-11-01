@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 from pytubefix import YouTube
 import math
-import yt_dlp
+from playwright.sync_api import sync_playwright
+import os
+import requests
 
 def safe_float(x):
     if x is None or math.isnan(x) or math.isinf(x):
@@ -10,24 +12,41 @@ def safe_float(x):
     return float(x)
 
 # -----------------------------
-# 1️⃣ 유튜브 영상 다운로드
+#  유튜브 영상 다운로드
 # -----------------------------
 def download_youtube_video(url, filename="video.mp4"):
-    ydl_opts = {
-        'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
-        'outtmpl': filename,
-        'noplaylist': True,
-        'quiet': True,
-        'merge_output_format': 'mp4',  # 조각화 영상도 MP4로 병합
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                          'AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/118.0.0.0 Safari/537.36'
-        }
-        # 필요 시 'cookiefile': 'cookies.txt' 추가 가능
+    # 1️⃣ Playwright로 유튜브 페이지 접근 (쿠키, User-Agent 추출)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, wait_until="networkidle")
+
+        ua = page.evaluate("() => navigator.userAgent")
+        cookies_list = page.context.cookies()
+        cookies = "; ".join([f"{c['name']}={c['value']}" for c in cookies_list])
+
+        browser.close()
+
+    # 2️⃣ 추출한 헤더 생성
+    headers = {
+        "User-Agent": ua,
+        "Cookie": cookies
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+
+    # 3️⃣ pytubefix 기본 다운로드 (HTML 파싱용)
+    yt = YouTube(url)
+
+    # 가장 해상도 높은 스트림 선택
+    stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
+
+    # 4️⃣ 직접 요청으로 다운로드 (403 방지)
+    video_url = stream.url
+    with requests.get(video_url, headers=headers, stream=True) as r:
+        r.raise_for_status()
+        with open(filename, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
     return filename
 
 # -----------------------------
