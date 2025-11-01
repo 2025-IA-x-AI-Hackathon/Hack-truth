@@ -21,33 +21,69 @@ def download_youtube_video(url, filename="video.mp4"):
         page = browser.new_page()
         page.goto(url, wait_until="networkidle")
 
+        # 브라우저에서 UA, 쿠키 추출
         ua = page.evaluate("() => navigator.userAgent")
         cookies_list = page.context.cookies()
         cookies = "; ".join([f"{c['name']}={c['value']}" for c in cookies_list])
 
         browser.close()
 
-    # 2️⃣ 추출한 헤더 생성
-    headers = {
+    # 2️⃣ PyTubeFix에 쿠키와 UA 적용
+    yt = YouTube(url)
+    yt.headers = {
         "User-Agent": ua,
         "Cookie": cookies
     }
 
-    # 3️⃣ pytubefix 기본 다운로드 (HTML 파싱용)
-    yt = YouTube(url)
-
     # 가장 해상도 높은 스트림 선택
     stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
+    if not stream:
+        raise RuntimeError("다운로드 가능한 스트림을 찾지 못했습니다.")
 
-    # 4️⃣ 직접 요청으로 다운로드 (403 방지)
+    # 3️⃣ 직접 requests로 다운로드
     video_url = stream.url
-    with requests.get(video_url, headers=headers, stream=True) as r:
+    with requests.get(video_url, headers=yt.headers, stream=True) as r:
         r.raise_for_status()
         with open(filename, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
     return filename
+
+# def download_youtube_video(url, filename="video.mp4"):
+#     # 1️⃣ Playwright로 유튜브 페이지 접근 (쿠키, User-Agent 추출)
+#     with sync_playwright() as p:
+#         browser = p.chromium.launch(headless=True)
+#         page = browser.new_page()
+#         page.goto(url, wait_until="networkidle")
+
+#         ua = page.evaluate("() => navigator.userAgent")
+#         cookies_list = page.context.cookies()
+#         cookies = "; ".join([f"{c['name']}={c['value']}" for c in cookies_list])
+
+#         browser.close()
+
+#     # 2️⃣ 추출한 헤더 생성
+#     headers = {
+#         "User-Agent": ua,
+#         "Cookie": cookies
+#     }
+
+#     # 3️⃣ pytubefix 기본 다운로드 (HTML 파싱용)
+#     yt = YouTube(url)
+
+#     # 가장 해상도 높은 스트림 선택
+#     stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
+
+#     # 4️⃣ 직접 요청으로 다운로드 (403 방지)
+#     video_url = stream.url
+#     with requests.get(video_url, headers=headers, stream=True) as r:
+#         r.raise_for_status()
+#         with open(filename, "wb") as f:
+#             for chunk in r.iter_content(chunk_size=8192):
+#                 if chunk:
+#                     f.write(chunk)
+#     return filename
 
 # -----------------------------
 # 2️⃣ 프레임 샘플링

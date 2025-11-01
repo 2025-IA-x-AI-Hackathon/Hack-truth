@@ -6,6 +6,7 @@ annotated-doc==0.0.3
 annotated-types==0.7.0
 anyio==4.11.0
 async-timeout==5.0.1
+asyncpg==0.30.0
 attrs==25.4.0
 cachetools==6.2.1
 certifi==2025.10.5
