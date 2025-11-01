@@ -15,31 +15,47 @@ def safe_float(x):
 # -----------------------------
 #  유튜브 영상 다운로드
 # -----------------------------
+import os
+from yt_dlp import YoutubeDL
+
 def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"):
     """
-    yt-dlp를 사용해서 유튜브 영상을 다운로드합니다.
-    - cookies_path: 로그인 상태 유지용 쿠키 파일
+    yt-dlp를 사용해 유튜브 영상을 다운로드합니다.
     - filename: 현재 경로에 저장할 파일명 (덮어쓰기)
+    - cookies_path: 필요 시 로그인 상태 유지용 쿠키 파일 경로
+    - ffmpeg 없이 영상+오디오 합쳐진 단일 파일 다운로드
     """
-    # 절대경로 변환
     filename = os.path.abspath(filename)
 
-    # yt-dlp 커맨드 생성
-    cmd = [
-        "yt-dlp",
-        "-4",  # IPv4 사용
-        "--cookies", cookies_path,
-        "-f", "b[ext=mp4]/b",  # mp4 포맷 우선
-        "-o", filename,
-        url
-    ]
+    if os.path.exists(filename):
+        os.remove(filename)
 
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"영상 다운로드 실패: {e}")
+    ydl_opts = {
+        "format": 'b[ext=mp4]/b',      # 단일 mp4 파일
+        "outtmpl": filename,           # 저장 경로
+        "force_ipv4": True,            # IPv6 문제 회피
+        "noplaylist": True,            # 플레이리스트 방지
+        "quiet": False
+    }
 
-    return filename
+    if cookies_path:
+        ydl_opts["cookiefile"] = cookies_path
+
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        saved_path = ydl.prepare_filename(info)
+
+    return saved_path
+
+# 사용 예시
+# downloaded_file = download_youtube_video(
+#     "https://www.youtube.com/watch?v=LwG355AsP1s",
+#     cookies_path="/home/ec2-user/cookies.txt"
+# )
+# print("Saved file:", downloaded_file)
+
+
+
 
 # -----------------------------
 # 2️⃣ 프레임 샘플링
