@@ -323,7 +323,7 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
 };
 
 const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
-  const url = `${apiBaseUrl}/verify/image`;
+  const url = `${apiBaseUrl}/verify/image-gemini`;
   const requestBody = { image_url: imageUrl };
 
   console.log("========== Image API Request ==========");
@@ -454,7 +454,7 @@ const handleImageFactCheck = async (info, tab) => {
     const payload = {
       imageUrl,
       result: response.result,
-      rawResponse: response,
+      rawModelResponse: response.raw_model_response,
     };
 
     sendMessageToTab(tab.id, {
