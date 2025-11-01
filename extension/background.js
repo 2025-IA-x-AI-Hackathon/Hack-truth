@@ -258,18 +258,175 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
   }
 };
 
+const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
+  const url = `${apiBaseUrl}/verify/image`;
+  const requestBody = { image_url: imageUrl };
+
+  console.log("========== Image API Request ==========");
+  console.log("URL:", url);
+  console.log("Method: POST");
+  console.log("Request Body:", JSON.stringify(requestBody, null, 2));
+  console.log("=======================================");
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log("Image API Response Status:", response.status);
+    console.log(
+      "Image API Response Headers:",
+      response.headers.get("content-type")
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const textResponse = await response.text();
+      console.error(
+        "Image API Non-JSON response received:",
+        textResponse.substring(0, 500)
+      );
+
+      if (response.status === 404) {
+        throw new Error(
+          `이미지 팩트 체크 API 엔드포인트를 찾을 수 없습니다. URL을 확인해주세요: ${url}`
+        );
+      } else if (response.status === 0 || response.status === 500) {
+        throw new Error(
+          `이미지 팩트 체크 서버 오류가 발생했습니다. API 서버가 정상적으로 작동하는지 확인해주세요.`
+        );
+      } else if (
+        textResponse.includes("<!doctype") ||
+        textResponse.includes("<!DOCTYPE")
+      ) {
+        throw new Error(
+          `이미지 팩트 체크 API 서버가 HTML을 반환했습니다. API URL이 올바른지 확인해주세요.\n요청 URL: ${url}\n응답 상태: ${response.status}`
+        );
+      } else {
+        throw new Error(
+          `예상치 못한 이미지 API 응답 형식입니다. (Content-Type: ${contentType})`
+        );
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("========== Image API Error Response ==========");
+      console.error("Status:", response.status);
+      console.error("Status Text:", response.statusText);
+      console.error("Error Body:", errorText);
+      console.error("================================================");
+      throw new Error(
+        `이미지 팩트 체크 API 요청 실패 (${response.status}): ${response.statusText}`
+      );
+    }
+
+    const jsonData = await response.json();
+    console.log("========== Image API Response ==========");
+    console.log("Response Body:", JSON.stringify(jsonData, null, 2));
+    console.log("========================================");
+    return jsonData;
+  } catch (error) {
+    console.error("========== Image API Request Error ==========");
+    console.error("Error:", error);
+    console.error("=============================================");
+
+    if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError")
+    ) {
+      throw new Error(
+        `이미지 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. API URL이 올바른지 확인해주세요: ${url}\n2. 서버가 실행 중인지 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
+      );
+    }
+
+    throw error;
+  }
+};
+
 // 이미지 팩트 체크 처리
-const handleImageFactCheck = (info, tab) => {
+const handleImageFactCheck = async (info, tab) => {
   const imageUrl = info.srcUrl;
 
-  // Content script로 메시지 전송
+  if (!imageUrl) {
+    console.error("No image URL found for image fact check");
+    return;
+  }
+
+  console.log("========== Image Fact Check Request ==========");
+  console.log("Image URL:", imageUrl);
+  console.log("==============================================");
+
+  const apiBaseUrl = await getApiBaseUrl();
+  if (!apiBaseUrl) {
+    sendMessageToTab(tab.id, {
+      type: "SHOW_API_URL_WARNING",
+      data: {
+        message:
+          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
+      },
+    });
+    return;
+  }
+
   sendMessageToTab(tab.id, {
-    type: "SHOW_FACT_CHECK_POPUP",
+    type: "SHOW_LOADING",
     data: {
-      type: "image",
-      content: imageUrl,
+      message: "요청한 작업을 처리중입니다",
     },
   });
+
+  try {
+    const response = await fetchImageFactCheckAPI(imageUrl, apiBaseUrl);
+
+    console.log("========== Image Fact Check API Response ==========");
+    console.log("Response Body:", JSON.stringify(response, null, 2));
+    console.log("===================================================");
+
+    const payload = {
+      imageUrl,
+      result: response.result,
+      rawResponse: response,
+    };
+
+    sendMessageToTab(tab.id, {
+      type: "SHOW_IMAGE_RESULT_MODAL",
+      data: payload,
+    });
+  } catch (error) {
+    console.error("========== Image Fact Check Error ==========");
+    console.error("Error:", error);
+    console.error("Error Message:", error.message);
+    console.error("============================================");
+
+    const isApiUrlError =
+      error.message.includes("API URL") ||
+      error.message.includes("API 서버에 연결할 수 없습니다") ||
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError");
+
+    if (isApiUrlError) {
+      sendMessageToTab(tab.id, {
+        type: "SHOW_API_URL_WARNING",
+        data: {
+          message:
+            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+        },
+      });
+    } else {
+      sendMessageToTab(tab.id, {
+        type: "SHOW_ERROR",
+        data: {
+          message: "이미지 팩트 체크 요청 중 오류가 발생했습니다.",
+          error: error.message,
+        },
+      });
+    }
+  }
 };
 
 // 탭에 메시지 전송 (에러 처리 포함)

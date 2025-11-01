@@ -287,11 +287,11 @@ const showResultModal = (data) => {
   const { result, rawModelResponse } = data;
 
   modal.innerHTML = `
-    <div class="modal-backdrop" onclick="document.getElementById('fact-check-result-modal').remove()"></div>
+    <div class="modal-backdrop"></div>
     <div class="modal-content">
       <div class="modal-header">
         <h2>📊 팩트 체크 결과</h2>
-        <button class="modal-close-btn" onclick="document.getElementById('fact-check-result-modal').remove()">✕</button>
+        <button class="modal-close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
         <div class="result-section">
@@ -336,6 +336,7 @@ const showResultModal = (data) => {
   `;
 
   document.body.appendChild(modal);
+  attachModalDismissHandlers(modal);
 };
 
 // 에러 모달 표시
@@ -352,11 +353,11 @@ const showErrorModal = (data) => {
   };
 
   modal.innerHTML = `
-    <div class="modal-backdrop" onclick="document.getElementById('fact-check-result-modal').remove()"></div>
+    <div class="modal-backdrop"></div>
     <div class="modal-content">
       <div class="modal-header">
         <h2>❌ 오류 발생</h2>
-        <button class="modal-close-btn" onclick="document.getElementById('fact-check-result-modal').remove()">✕</button>
+        <button class="modal-close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
         <div class="error-message">
@@ -368,6 +369,7 @@ const showErrorModal = (data) => {
   `;
 
   document.body.appendChild(modal);
+  attachModalDismissHandlers(modal);
 };
 
 // 결과 모달 제거
@@ -375,6 +377,34 @@ const removeResultModal = () => {
   const modal = document.getElementById("fact-check-result-modal");
   if (modal) {
     modal.remove();
+  }
+};
+
+const attachModalDismissHandlers = (modal) => {
+  if (!modal) {
+    return;
+  }
+
+  const closeModal = () => {
+    removeResultModal();
+  };
+
+  const closeBtn = modal.querySelector(".modal-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeModal, { once: true });
+  }
+
+  const backdrop = modal.querySelector(".modal-backdrop");
+  if (backdrop) {
+    backdrop.addEventListener(
+      "click",
+      (event) => {
+        if (event.target === backdrop) {
+          closeModal();
+        }
+      },
+      { once: true }
+    );
   }
 };
 
@@ -423,11 +453,11 @@ const showVideoResultModal = (data) => {
     : [];
 
   modal.innerHTML = `
-    <div class="modal-backdrop" onclick="document.getElementById('fact-check-result-modal').remove()"></div>
+    <div class="modal-backdrop"></div>
     <div class="modal-content">
       <div class="modal-header">
         <h2>🎬 ${platformName} 영상 팩트 체크 결과</h2>
-        <button class="modal-close-btn" onclick="document.getElementById('fact-check-result-modal').remove()">✕</button>
+        <button class="modal-close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
         <div class="result-section">
@@ -486,6 +516,106 @@ const showVideoResultModal = (data) => {
   `;
 
   document.body.appendChild(modal);
+  attachModalDismissHandlers(modal);
+};
+
+// 이미지 팩트 체크 결과 모달 표시
+const showImageResultModal = (data) => {
+  removeResultModal();
+
+  const modal = document.createElement("div");
+  modal.id = "fact-check-result-modal";
+  modal.className = "fact-check-result-modal image";
+
+  const result = data?.result || {};
+  const success = !!result.success;
+  const verdictText = result.verdict
+    ? result.verdict
+    : success
+    ? "판단 결과를 가져오지 못했습니다."
+    : "분석이 완료되지 않았습니다.";
+
+  const summaryText = success
+    ? `이 이미지는 ${verdictText}`
+    : result.error
+    ? `분석에 실패했습니다: ${result.error}`
+    : "이미지 분석 결과를 불러오지 못했습니다.";
+
+  const confidenceValue =
+    typeof result.confidence === "number" ? `${result.confidence}%` : "-";
+  const fakeProbValue =
+    typeof result.fake_prob === "number" ? `${result.fake_prob}%` : "-";
+  const realProbValue =
+    typeof result.real_prob === "number" ? `${result.real_prob}%` : "-";
+  const modelName = result.model_name || "모델 정보 없음";
+
+  modal.innerHTML = `
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🖼️ 이미지 팩트 체크 결과</h2>
+        <button class="modal-close-btn" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        ${
+          data?.imageUrl
+            ? `
+        <div class="result-section image-preview-section">
+          <h3>분석 대상 이미지</h3>
+          <div class="image-preview-wrapper">
+            <img src="${escapeHtml(
+              data.imageUrl
+            )}" alt="팩트 체크 대상 이미지" referrerpolicy="no-referrer"/>
+          </div>
+        </div>
+        `
+            : ""
+        }
+
+        <div class="result-section">
+          <h3>분석 요약</h3>
+          <p class="image-result-summary">${escapeHtml(summaryText)}</p>
+        </div>
+
+        <div class="result-section">
+          <h3>판단 지표</h3>
+          <div class="image-score-grid">
+            <div class="image-score-card">
+              <span class="score-label">Confidence</span>
+              <span class="score-value">${escapeHtml(confidenceValue)}</span>
+            </div>
+            <div class="image-score-card">
+              <span class="score-label">Fake Prob</span>
+              <span class="score-value">${escapeHtml(fakeProbValue)}</span>
+            </div>
+            <div class="image-score-card">
+              <span class="score-label">Real Prob</span>
+              <span class="score-value">${escapeHtml(realProbValue)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-section">
+          <h3>모델 정보</h3>
+          <p class="image-model-name">${escapeHtml(modelName)}</p>
+        </div>
+
+        ${
+          !success && result.error
+            ? `
+        <div class="result-section">
+          <h3>오류 상세</h3>
+          <p class="image-error-text">${escapeHtml(result.error)}</p>
+        </div>
+        `
+            : ""
+        }
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  attachModalDismissHandlers(modal);
 };
 
 // ==================== 백그라운드 감지 기능 ====================
@@ -822,6 +952,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "SHOW_API_URL_WARNING") {
     hideLoadingOverlay();
     showApiUrlWarningOverlay(request.data.message);
+  } else if (request.type === "SHOW_IMAGE_RESULT_MODAL") {
+    hideLoadingOverlay();
+    showImageResultModal(request.data);
   } else if (request.type === "SHOW_VIDEO_RESULT_MODAL") {
     hideLoadingOverlay();
     removeUrlOverlay();
