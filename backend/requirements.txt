@@ -97,3 +97,5 @@ yarl==1.22.0
 yt-dlp==2025.10.14
 zipp==3.23.0
 torchvision
+faster-whisper
+soundfile

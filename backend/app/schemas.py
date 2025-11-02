@@ -122,12 +122,51 @@ __all__ = [
     "ImageVerificationResponse",
     "GeminiImageVerdict",
     "GeminiImageVerificationResponse",
+    "VideoRequest",
+    "VideoFactCheckResult",
+    "VideoResponse",
 ]
 
 class VideoRequest(BaseModel):
     url: str
 
+
+class VideoFactCheckResult(BaseModel):
+    accuracy: str = Field(..., description="팩트체크 정확도 퍼센트 문자열")
+    accuracy_reason: str = Field(..., description="정확도 산출 이유(한국어)")
+    reason: str = Field(..., description="팩트체크 결과 요약(한국어)")
+    urls: List[str] = Field(default_factory=list, description="참고한 출처 URL 목록")
+
+
 class VideoResponse(BaseModel):
     fft_artifact_score: str
     action_pattern_score: str
     result: str
+    transcript: Optional[str] = Field(
+        default=None,
+        description="Whisper가 추출한 전체 대사 텍스트."
+    )
+    transcript_srt: Optional[str] = Field(
+        default=None,
+        description="SRT 형식의 자막 텍스트."
+    )
+    fact_check: Optional[VideoFactCheckResult] = Field(
+        default=None,
+        description="Gemini 기반 팩트체크 결과."
+    )
+    cached: bool = Field(
+        default=False,
+        description="DB/캐시에서 재활용된 응답인지 여부."
+    )
+    record_id: Optional[UUID] = Field(
+        default=None,
+        description="저장된 비디오 분석 레코드의 식별자."
+    )
+    video_id: Optional[str] = Field(
+        default=None,
+        description="YouTube 비디오 ID."
+    )
+    duration: Optional[float] = Field(
+        default=None,
+        description="영상 길이(초 단위)."
+    )
