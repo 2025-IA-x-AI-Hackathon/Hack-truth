@@ -155,12 +155,18 @@ async def _download_image_bytes(image_url: str) -> tuple[bytes, str]:
     extension = Path(normalized_path).suffix.lower()
 
     if extension and extension not in ALLOWED_IMAGE_EXTENSIONS:
-        message = (
-            "지원하지 않는 이미지 확장자 유형입니다. "
-            f"지원 형식: {ALLOWED_IMAGE_EXTENSION_LABEL}."
-        )
         logger.warning("Rejected image with unsupported extension: %s", image_url)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "error": "unsupported_image_extension",
+                "message": (
+                    "지원하지 않는 이미지 확장자 유형입니다. "
+                    f"지원 형식: {ALLOWED_IMAGE_EXTENSION_LABEL}."
+                ),
+                "requested_extension": extension,
+            },
+        )
 
     request_headers = _build_image_request_headers(parsed_url)
 
@@ -205,12 +211,18 @@ async def _download_image_bytes(image_url: str) -> tuple[bytes, str]:
 
     content_type = response.headers.get("content-type", "").split(";")[0].lower()
     if content_type and content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
-        message = (
-            "지원하지 않는 이미지 MIME 유형입니다. "
-            f"지원 형식: {ALLOWED_IMAGE_CONTENT_TYPE_LABEL}."
-        )
         logger.warning("Rejected image with unsupported MIME type %s: %s", content_type, image_url)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "error": "unsupported_image_mime_type",
+                "message": (
+                    "지원하지 않는 이미지 MIME 유형입니다. "
+                    f"지원 형식: {ALLOWED_IMAGE_CONTENT_TYPE_LABEL}."
+                ),
+                "requested_mime_type": content_type,
+            },
+        )
 
     content = response.content
     if not content:
