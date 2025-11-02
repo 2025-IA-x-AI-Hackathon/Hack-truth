@@ -187,7 +187,7 @@ const LandingPage = () => {
         <div className="landing__flow-grid">
           <article className="landing__flow-card">
             <span className="landing__flow-badge">영상</span>
-            <h3>스트리밍 콘텐츠 Fact Check</h3>
+            <h3>영상 콘텐츠 Fact Check</h3>
             <ul>
               <li>유튜브 영상 우측 하단에 Fact Check 버튼 노출</li>
               <li>버튼 클릭 시 오버레이가 요청 처리 중임을 안내</li>
