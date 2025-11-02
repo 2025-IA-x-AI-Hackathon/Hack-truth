@@ -3,9 +3,8 @@ import numpy as np
 from pytubefix import YouTube
 import math
 from playwright.sync_api import sync_playwright
-import subprocess
 import os
-import requests
+from yt_dlp import YoutubeDL
 
 def safe_float(x):
     if x is None or math.isnan(x) or math.isinf(x):
@@ -15,16 +14,7 @@ def safe_float(x):
 # -----------------------------
 #  유튜브 영상 다운로드
 # -----------------------------
-import os
-from yt_dlp import YoutubeDL
-
 def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"):
-    """
-    yt-dlp를 사용해 유튜브 영상을 다운로드합니다.
-    - filename: 현재 경로에 저장할 파일명 (덮어쓰기)
-    - cookies_path: 필요 시 로그인 상태 유지용 쿠키 파일 경로
-    - ffmpeg 없이 영상+오디오 합쳐진 단일 파일 다운로드
-    """
     filename = os.path.abspath(filename)
 
     if os.path.exists(filename):
@@ -47,16 +37,6 @@ def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"
 
     return saved_path
 
-# 사용 예시
-# downloaded_file = download_youtube_video(
-#     "https://www.youtube.com/watch?v=LwG355AsP1s",
-#     cookies_path="/home/ec2-user/cookies.txt"
-# )
-# print("Saved file:", downloaded_file)
-
-
-
-
 # -----------------------------
 # 2️⃣ 프레임 샘플링
 # -----------------------------
@@ -64,12 +44,17 @@ def sample_frames(video_path, sample_rate=30):
     cap = cv2.VideoCapture(video_path)
     frames = []
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
     for i in range(0, total_frames, sample_rate):
         cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
         if ret:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frames.append(gray)
+            # ① 그레이 변환
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # ② 가우시안 블러로 노이즈 제거
+            frame = cv2.GaussianBlur(frame, (5, 5), 0)
+            frames.append(frame)
+    
     cap.release()
     return frames
 
@@ -119,20 +104,17 @@ def analyze_motion(frames):
 # -----------------------------
 # 5️⃣ 최종 판정
 # -----------------------------
-def predict_ai_video(fft_score, motion_score,
-                     fft_threshold=0.6, motion_threshold=7.0):
-    fft_flag = fft_score < fft_threshold
-    motion_flag = motion_score < motion_threshold
+def predict_ai_video(fft_score, motion_score):
+        
+    # Motion 점수 기준으로 덮어쓰기
+    if motion_score <= 3.7:
+        result = "AI 생성 가능성 있음"
+    elif motion_score >= 6.1:
+        result = "실제 영상 가능성 있음"
 
-    # motion_score가 너무 낮으면 fft_flag와 상관없이 AI 생성 가능성 중간
-    if motion_score <= 4.59:
-        return "AI 생성 가능성 중간"
-
-    if fft_flag and motion_flag:
-        return "AI 생성 가능성 높음"
-    elif fft_flag:
-        return "AI 생성 가능성 중간"
-    elif motion_flag:
-        return "실제 영상 가능성 중간"
+    if fft_score <= 0.5 or fft_score >= 0.62:
+        result = "AI 생성 가능성 있음"
     else:
-        return "실제 영상 가능성 높음"
+        result = "실제 영상 가능성 있음"
+
+    return result
