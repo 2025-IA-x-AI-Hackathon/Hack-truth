@@ -156,7 +156,7 @@ def download_youtube_video(url: str, cookies_path: str = "cookies.txt") -> Video
         )
 
 
-WHISPER_MODEL_NAME = "small"
+WHISPER_MODEL_NAME = "base"
 WHISPER_CPU_THREADS = 16
 WHISPER_NUM_WORKERS = 1
 WHISPER_COMPUTE_TYPE = "int8"
