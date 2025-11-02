@@ -37,6 +37,19 @@ body {
   font-weight: 600;
 }
 
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.logo-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.04em;
+}
+
 .content {
   padding: 20px;
   flex: 1;
@@ -116,6 +129,17 @@ body {
   color: #666;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.usage-description {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.usage-description strong {
+  color: #1f2937;
 }
 
 .settings {
@@ -213,64 +237,4 @@ input:checked + .slider:before {
 .version {
   color: #999 !important;
   font-size: 11px !important;
-}
-
-/* API URL 설정 스타일 */
-.api-url-setting {
-  flex-direction: column;
-  align-items: flex-start;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
-}
-
-.api-url-input-container {
-  width: 100%;
-  margin-top: 12px;
-}
-
-.api-url-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: monospace;
-  margin-bottom: 8px;
-  box-sizing: border-box;
-}
-
-.api-url-input:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.save-api-url-btn {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.save-api-url-btn:hover {
-  transform: translateY(-2px);
-}
-
-.api-url-status {
-  margin: 8px 0 0 0;
-  font-size: 12px;
-  min-height: 16px;
-}
-
-.api-url-status.success {
-  color: #28a745;
-}
-
-.api-url-status.error {
-  color: #dc3545;
 }

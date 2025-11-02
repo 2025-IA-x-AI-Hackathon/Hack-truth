@@ -1,23 +1,62 @@
 // Background Service Worker
 // Reference: https://developer.chrome.com/docs/extensions/mv3/service_workers/
 
+const API_BASE_URL = "http://15.165.34.51:8000";
+
 let isFactCheckEnabled = true;
 
-// API URL을 Chrome Storage에서 가져오는 함수
-const getApiBaseUrl = async () => {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(["apiBaseUrl"], (result) => {
-      // 저장된 값이 있으면 사용, 없으면 null 반환 (사용자가 설정하도록 유도)
-      if (result.apiBaseUrl) {
-        resolve(result.apiBaseUrl);
-      } else {
-        resolve(null);
-      }
-    });
+const SHARE_BASE_URL = "http://15.165.34.51/share";
+
+const activeRequests = new Map();
+
+const isRequestInProgress = (tabId) => {
+  return typeof tabId === "number" && activeRequests.has(tabId);
+};
+
+const startRequestTracking = (tabId, type) => {
+  if (typeof tabId !== "number") {
+    return false;
+  }
+  activeRequests.set(tabId, {
+    type,
+    startedAt: Date.now(),
+  });
+  return true;
+};
+
+const finishRequestTracking = (tabId, type) => {
+  if (typeof tabId !== "number") {
+    return;
+  }
+
+  const current = activeRequests.get(tabId);
+  if (!current) {
+    return;
+  }
+
+  if (!type || !current.type || current.type === type) {
+    activeRequests.delete(tabId);
+  }
+};
+
+const notifyRequestInProgress = (tabId) => {
+  if (typeof tabId !== "number") {
+    return;
+  }
+
+  sendMessageToTab(tabId, {
+    type: "SHOW_REQUEST_IN_PROGRESS",
+    data: {
+      message: "이미 요청중인 작업이 있습니다.",
+    },
   });
 };
 
-const SHARE_BASE_URL = "http://15.165.34.51/share";
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (activeRequests.has(tabId)) {
+    activeRequests.delete(tabId);
+  }
+});
 
 const buildShareUrl = (recordId) => {
   if (!recordId) {
@@ -54,7 +93,11 @@ const isLocalDevelopmentUrl = (targetUrl) => {
       hostname.endsWith(".local")
     );
   } catch (error) {
-    console.warn("Failed to parse URL while checking localhost:", targetUrl, error);
+    console.warn(
+      "Failed to parse URL while checking localhost:",
+      targetUrl,
+      error
+    );
     return false;
   }
 };
@@ -131,93 +174,92 @@ const handleTextFactCheck = async (info, tab) => {
     return;
   }
 
+  const tabId = typeof tab?.id === "number" ? tab.id : null;
+  if (tabId === null) {
+    console.error("No tab ID found for text fact check");
+    return;
+  }
+
+  if (isRequestInProgress(tabId)) {
+    notifyRequestInProgress(tabId);
+    return;
+  }
+
   console.log("========== Text Fact Check Request ==========");
   console.log("Request Body:", JSON.stringify({ text: selectedText }, null, 2));
   console.log("==============================================");
 
-  // Storage에서 API URL 가져오기
-  const apiBaseUrl = await getApiBaseUrl();
+  const trackingStarted = startRequestTracking(tabId, "text");
 
-  // API URL이 설정되지 않은 경우 경고 오버레이 표시
-  if (!apiBaseUrl) {
-    sendMessageToTab(tab.id, {
-      type: "SHOW_API_URL_WARNING",
-      data: {
-        message:
-          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
-      },
-    });
-    return;
-  }
-
-  // Content script에 로딩 표시 요청
-  sendMessageToTab(tab.id, {
+  sendMessageToTab(tabId, {
     type: "SHOW_LOADING",
     data: {
       message: "요청한 작업을 처리중입니다",
     },
   });
 
-  // API 요청 전송
-  fetchFactCheckAPI(selectedText, apiBaseUrl)
-    .then(async (response) => {
-      console.log("========== Text Fact Check Response ==========");
-      console.log("Response Body:", JSON.stringify(response, null, 2));
-      console.log("==============================================");
+  try {
+    const response = await fetchFactCheckAPI(selectedText);
 
-      const shareUrl = buildShareUrl(response.record_id);
+    console.log("========== Text Fact Check Response ==========");
+    console.log("Response Body:", JSON.stringify(response, null, 2));
+    console.log("==============================================");
 
-      // 성공 시 결과 모달 표시
-      sendMessageToTab(tab.id, {
-        type: "SHOW_RESULT_MODAL",
+    const shareUrl = buildShareUrl(response.record_id);
+
+    sendMessageToTab(tabId, {
+      type: "SHOW_RESULT_MODAL",
+      data: {
+        result: response.result,
+        accuracyReason:
+          response.result?.accuracy_reason || response.accuracy_reason || "",
+        recordId: response.record_id,
+        shareUrl,
+        createdAt: response.created_at,
+        inputText: response.input_text,
+      },
+    });
+  } catch (error) {
+    console.error("========== Text Fact Check Error ==========");
+    console.error("Error:", error);
+    console.error("==========================================");
+
+    const messageIncludes = (text) =>
+      typeof error?.message === "string" && error.message.includes(text);
+
+    const isApiUrlError =
+      messageIncludes("API URL") ||
+      messageIncludes("API 서버에 연결할 수 없습니다") ||
+      messageIncludes("Failed to fetch") ||
+      messageIncludes("NetworkError");
+
+    if (isApiUrlError) {
+      sendMessageToTab(tabId, {
+        type: "SHOW_API_URL_WARNING",
         data: {
-          result: response.result,
-          accuracyReason:
-            response.result?.accuracy_reason || response.accuracy_reason || "",
-          recordId: response.record_id,
-          shareUrl,
-          createdAt: response.created_at,
-          inputText: response.input_text,
+          message:
+            "팩트 체크 API 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
         },
       });
-    })
-    .catch((error) => {
-      console.error("========== Text Fact Check Error ==========");
-      console.error("Error:", error);
-      console.error("==========================================");
-
-      // API URL 관련 에러인지 확인
-      const isApiUrlError =
-        error.message.includes("API URL") ||
-        error.message.includes("API 서버에 연결할 수 없습니다") ||
-        error.message.includes("Failed to fetch") ||
-        error.message.includes("NetworkError");
-
-      if (isApiUrlError) {
-        // 잘못된 URL인 경우 경고 오버레이 표시
-        sendMessageToTab(tab.id, {
-          type: "SHOW_API_URL_WARNING",
-          data: {
-            message:
-              "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
-          },
-        });
-      } else {
-        // 그 외 에러는 기존 에러 모달 표시
-        sendMessageToTab(tab.id, {
-          type: "SHOW_ERROR",
-          data: {
-            message: "팩트 체크 요청 중 오류가 발생했습니다.",
-            error: error.message,
-          },
-        });
-      }
-    });
+    } else {
+      sendMessageToTab(tabId, {
+        type: "SHOW_ERROR",
+        data: {
+          message: "팩트 체크 요청 중 오류가 발생했습니다.",
+          error: error.message,
+        },
+      });
+    }
+  } finally {
+    if (trackingStarted) {
+      finishRequestTracking(tabId, "text");
+    }
+  }
 };
 
 // API 요청 함수
-const fetchFactCheckAPI = async (text, apiBaseUrl) => {
-  const url = `${apiBaseUrl}/verify/text`;
+const fetchFactCheckAPI = async (text) => {
+  const url = new URL("/verify/text", API_BASE_URL).toString();
   const requestBody = { text: text };
 
   console.log("========== API Request ==========");
@@ -298,7 +340,7 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
       error.message.includes("NetworkError")
     ) {
       throw new Error(
-        `API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. API URL이 올바른지 확인해주세요: ${url}\n2. 서버가 실행 중인지 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
+        `API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. 서버가 실행 중인지 확인해주세요\n2. 네트워크 연결 상태를 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
       );
     }
 
@@ -307,8 +349,8 @@ const fetchFactCheckAPI = async (text, apiBaseUrl) => {
   }
 };
 
-const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
-  const url = `${apiBaseUrl}/verify/image-gemini`;
+const fetchImageFactCheckAPI = async (imageUrl) => {
+  const url = new URL("/verify/image-gemini", API_BASE_URL).toString();
   const requestBody = { image_url: imageUrl };
 
   console.log("========== Image API Request ==========");
@@ -353,7 +395,7 @@ const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
         textResponse.includes("<!DOCTYPE")
       ) {
         throw new Error(
-          `이미지 팩트 체크 API 서버가 HTML을 반환했습니다. API URL이 올바른지 확인해주세요.\n요청 URL: ${url}\n응답 상태: ${response.status}`
+          `이미지 팩트 체크 API 서버가 HTML을 반환했습니다.\n요청 URL: ${url}\n응답 상태: ${response.status}`
         );
       } else {
         throw new Error(
@@ -369,6 +411,15 @@ const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
       console.error("Status Text:", response.statusText);
       console.error("Error Body:", errorText);
       console.error("================================================");
+
+      if (response.status === 415) {
+        const unsupportedError = new Error("UNSUPPORTED_IMAGE_TYPE");
+        unsupportedError.code = "UNSUPPORTED_IMAGE_TYPE";
+        unsupportedError.status = response.status;
+        unsupportedError.responseBody = errorText;
+        throw unsupportedError;
+      }
+
       throw new Error(
         `이미지 팩트 체크 API 요청 실패 (${response.status}): ${response.statusText}`
       );
@@ -389,7 +440,7 @@ const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
       error.message.includes("NetworkError")
     ) {
       throw new Error(
-        `이미지 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. API URL이 올바른지 확인해주세요: ${url}\n2. 서버가 실행 중인지 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
+        `이미지 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. 서버가 실행 중인지 확인해주세요\n2. 네트워크 연결 상태를 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
       );
     }
 
@@ -397,29 +448,12 @@ const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
   }
 };
 
-const buildVideoVerificationUrl = (apiBaseUrl) => {
-  try {
-    const parsedBase = new URL(apiBaseUrl);
-
-    // 임시 개발 요구사항: 비디오 검증 엔드포인트는 4242 포트를 사용
-    parsedBase.port = "4242";
-
-    const basePath = (parsedBase.pathname || "").replace(/\/+$/, "");
-    const mergedPath = `${basePath}/verify/video`.replace(/\/{2,}/g, "/");
-
-    return `${parsedBase.origin}${mergedPath.startsWith("/") ? mergedPath : `/${mergedPath}`}`;
-  } catch (error) {
-    console.error(
-      "Failed to build video verification URL from base:",
-      apiBaseUrl,
-      error
-    );
-    throw new Error("API Base URL이 올바르지 않습니다. 올바른 형식인지 확인해주세요.");
-  }
+const buildVideoVerificationUrl = () => {
+  return new URL("/verify/video", API_BASE_URL).toString();
 };
 
-const fetchVideoFactCheckAPI = async (contentUrl, apiBaseUrl) => {
-  const endpointUrl = buildVideoVerificationUrl(apiBaseUrl);
+const fetchVideoFactCheckAPI = async (contentUrl) => {
+  const endpointUrl = buildVideoVerificationUrl();
   const requestBody = { url: contentUrl };
 
   console.log("========== Video API Request ==========");
@@ -500,7 +534,7 @@ const fetchVideoFactCheckAPI = async (contentUrl, apiBaseUrl) => {
       error.message.includes("NetworkError")
     ) {
       throw new Error(
-        `비디오 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. API URL이 올바른지 확인해주세요: ${endpointUrl}\n2. 서버가 실행 중인지 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
+        `비디오 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. 서버가 실행 중인지 확인해주세요\n2. 네트워크 연결 상태를 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
       );
     }
 
@@ -517,23 +551,24 @@ const handleImageFactCheck = async (info, tab) => {
     return;
   }
 
+  const tabId = typeof tab?.id === "number" ? tab.id : null;
+  if (tabId === null) {
+    console.error("No tab ID found for image fact check");
+    return;
+  }
+
+  if (isRequestInProgress(tabId)) {
+    notifyRequestInProgress(tabId);
+    return;
+  }
+
   console.log("========== Image Fact Check Request ==========");
   console.log("Image URL:", imageUrl);
   console.log("==============================================");
 
-  const apiBaseUrl = await getApiBaseUrl();
-  if (!apiBaseUrl) {
-    sendMessageToTab(tab.id, {
-      type: "SHOW_API_URL_WARNING",
-      data: {
-        message:
-          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
-      },
-    });
-    return;
-  }
+  const trackingStarted = startRequestTracking(tabId, "image");
 
-  sendMessageToTab(tab.id, {
+  sendMessageToTab(tabId, {
     type: "SHOW_LOADING",
     data: {
       message: "요청한 작업을 처리중입니다",
@@ -541,7 +576,7 @@ const handleImageFactCheck = async (info, tab) => {
   });
 
   try {
-    const response = await fetchImageFactCheckAPI(imageUrl, apiBaseUrl);
+    const response = await fetchImageFactCheckAPI(imageUrl);
 
     console.log("========== Image Fact Check API Response ==========");
     console.log("Response Body:", JSON.stringify(response, null, 2));
@@ -550,10 +585,9 @@ const handleImageFactCheck = async (info, tab) => {
     const payload = {
       imageUrl,
       result: response.result,
-      rawModelResponse: response.raw_model_response,
     };
 
-    sendMessageToTab(tab.id, {
+    sendMessageToTab(tabId, {
       type: "SHOW_IMAGE_RESULT_MODAL",
       data: payload,
     });
@@ -563,28 +597,49 @@ const handleImageFactCheck = async (info, tab) => {
     console.error("Error Message:", error.message);
     console.error("============================================");
 
+    const isUnsupportedImageType =
+      error?.code === "UNSUPPORTED_IMAGE_TYPE" ||
+      error?.message === "UNSUPPORTED_IMAGE_TYPE";
+
+    if (isUnsupportedImageType) {
+      sendMessageToTab(tabId, {
+        type: "SHOW_ERROR",
+        data: {
+          message: "지원되지 않는 이미지 유형입니다.",
+        },
+      });
+      return;
+    }
+
+    const messageIncludes = (text) =>
+      typeof error?.message === "string" && error.message.includes(text);
+
     const isApiUrlError =
-      error.message.includes("API URL") ||
-      error.message.includes("API 서버에 연결할 수 없습니다") ||
-      error.message.includes("Failed to fetch") ||
-      error.message.includes("NetworkError");
+      messageIncludes("API URL") ||
+      messageIncludes("API 서버에 연결할 수 없습니다") ||
+      messageIncludes("Failed to fetch") ||
+      messageIncludes("NetworkError");
 
     if (isApiUrlError) {
-      sendMessageToTab(tab.id, {
+      sendMessageToTab(tabId, {
         type: "SHOW_API_URL_WARNING",
         data: {
           message:
-            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+            "팩트 체크 API 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
         },
       });
     } else {
-      sendMessageToTab(tab.id, {
+      sendMessageToTab(tabId, {
         type: "SHOW_ERROR",
         data: {
           message: "이미지 팩트 체크 요청 중 오류가 발생했습니다.",
           error: error.message,
         },
       });
+    }
+  } finally {
+    if (trackingStarted) {
+      finishRequestTracking(tabId, "image");
     }
   }
 };
@@ -594,20 +649,8 @@ const handleVideoFactCheck = async (contentUrl, platform, tabId) => {
     throw new Error("영상 URL이 존재하지 않습니다.");
   }
 
-  const apiBaseUrl = await getApiBaseUrl();
-  if (!apiBaseUrl) {
-    sendMessageToTab(tabId, {
-      type: "SHOW_API_URL_WARNING",
-      data: {
-        message:
-          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
-      },
-    });
-    throw new Error("API Base URL이 설정되지 않았습니다.");
-  }
-
   try {
-    const response = await fetchVideoFactCheckAPI(contentUrl, apiBaseUrl);
+    const response = await fetchVideoFactCheckAPI(contentUrl);
 
     const payload = {
       platform,
@@ -638,7 +681,7 @@ const handleVideoFactCheck = async (contentUrl, platform, tabId) => {
         type: "SHOW_API_URL_WARNING",
         data: {
           message:
-            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+            "팩트 체크 API 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
         },
       });
     } else {
@@ -773,29 +816,14 @@ const handleAutoFactCheck = async (text, url, tabId) => {
     return { skipped: true, reason: "localhost_url" };
   }
 
-  // API URL 가져오기
-  const apiBaseUrl = await getApiBaseUrl();
-  if (!apiBaseUrl) {
-    console.log("API URL not configured, skipping auto fact check");
-    // API URL이 없을 때 경고 오버레이 표시
-    sendMessageToTab(tabId, {
-      type: "SHOW_API_URL_WARNING",
-      data: {
-        message:
-          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
-      },
-    });
-    throw new Error("API URL not configured");
-  }
-
   console.log("========== Starting API Request ==========");
-  console.log("API Base URL:", apiBaseUrl);
+  console.log("API Base URL:", API_BASE_URL);
   console.log("Text length:", text.length);
   console.log("===========================================");
 
   try {
     // API 요청 전송
-    const response = await fetchFactCheckAPI(text, apiBaseUrl);
+    const response = await fetchFactCheckAPI(text);
 
     console.log("========== Auto Fact Check API Response ==========");
     console.log("Response Body:", JSON.stringify(response, null, 2));
@@ -853,7 +881,7 @@ const handleAutoFactCheck = async (text, url, tabId) => {
         type: "SHOW_API_URL_WARNING",
         data: {
           message:
-            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+            "팩트 체크 API 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
         },
       });
     }
@@ -899,21 +927,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // 비동기 응답을 위해 true 반환
   } else if (request.type === "TOGGLE_BACKGROUND_DETECTION") {
     const enabled = !!request.enabled;
-    chrome.storage.sync.set(
-      { isBackgroundDetectionEnabled: enabled },
-      () => {
-        if (chrome.runtime.lastError) {
-          console.error(
-            "Failed to persist background detection toggle:",
-            chrome.runtime.lastError.message
-          );
-          sendResponse({ success: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-
-        sendResponse({ success: true, enabled });
+    chrome.storage.sync.set({ isBackgroundDetectionEnabled: enabled }, () => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "Failed to persist background detection toggle:",
+          chrome.runtime.lastError.message
+        );
+        sendResponse({
+          success: false,
+          error: chrome.runtime.lastError.message,
+        });
+        return;
       }
-    );
+
+      sendResponse({ success: true, enabled });
+    });
     return true;
   } else if (request.type === "GET_BACKGROUND_DETECTION_STATUS") {
     chrome.storage.sync.get(["isBackgroundDetectionEnabled"], (result) => {
@@ -924,9 +952,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ enabled });
     });
     return true;
-  } else if (request.type === "API_URL_UPDATED") {
-    console.log("API URL updated:", request.apiUrl);
-    sendResponse({ success: true });
   } else if (request.type === "AUTO_FACT_CHECK_TEXT") {
     // 자동 팩트 체크 요청 처리
     const tabId = sender.tab?.id;
@@ -960,14 +985,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     return true; // 비동기 응답을 위해 true 반환 (중요!)
   } else if (request.type === "REQUEST_VIDEO_FACT_CHECK") {
-    const tabId = sender.tab?.id;
-    if (!tabId) {
+    const tabId =
+      typeof sender.tab?.id === "number" ? sender.tab.id : null;
+    if (tabId === null) {
       console.error("No tab ID found for video fact check");
       sendResponse({ success: false, error: "Tab ID not found" });
       return;
     }
 
+    if (isRequestInProgress(tabId)) {
+      notifyRequestInProgress(tabId);
+      sendResponse({ success: false, error: "request_in_progress" });
+      return;
+    }
+
     const { url, platform } = request.data || {};
+    const trackingStarted = startRequestTracking(tabId, "video");
 
     handleVideoFactCheck(url, platform, tabId)
       .then((payload) => {
@@ -984,6 +1017,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         );
         console.error("=====================================================");
         sendResponse({ success: false, error: error.message });
+      })
+      .finally(() => {
+        if (trackingStarted) {
+          finishRequestTracking(tabId, "video");
+        }
       });
 
     return true;

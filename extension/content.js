@@ -1,42 +1,36 @@
 // Content Script - 웹페이지에 주입되는 스크립트
 // Reference: https://developer.chrome.com/docs/extensions/mv3/content_scripts/
 
-// 페이지 로드 시 YouTube/Instagram 감지 버튼 표시
+// 페이지 로드 시 YouTube 감지 버튼 표시
 const initializePageSpecificButtons = () => {
   const url = window.location.href;
 
   if (isYouTubePage(url)) {
     showYouTubeButton();
-  } else if (isInstagramPage(url)) {
-    showInstagramButton();
+  } else {
+    removeExistingButton();
   }
 };
 
 // YouTube 페이지인지 확인
 const isYouTubePage = (url) => {
-  return url.includes("youtube.com/watch") || url.includes("youtu.be/");
-};
+  if (typeof url !== "string") {
+    return false;
+  }
 
-// Instagram 페이지인지 확인
-const isInstagramPage = (url) => {
   return (
-    url.includes("instagram.com/p/") || url.includes("instagram.com/reel/")
+    url.includes("youtube.com/watch") ||
+    url.includes("youtube.com/shorts/") ||
+    url.includes("youtu.be/")
   );
 };
 
 // YouTube 버튼 표시
 const showYouTubeButton = () => {
   removeExistingButton();
-  const button = createPageButton("현재 유투브 영상 거짓 판별하기", "youtube");
-  document.body.appendChild(button);
-};
-
-// Instagram 버튼 표시
-const showInstagramButton = () => {
-  removeExistingButton();
   const button = createPageButton(
-    "현재 인스타그램 포스트 거짓 판별하기",
-    "instagram"
+    "현재 유튜브 영상·쇼츠 거짓 판별하기",
+    "youtube"
   );
   document.body.appendChild(button);
 };
@@ -90,8 +84,8 @@ const showPageButtonAgain = () => {
   const url = window.location.href;
   if (isYouTubePage(url)) {
     showYouTubeButton();
-  } else if (isInstagramPage(url)) {
-    showInstagramButton();
+  } else {
+    removeExistingButton();
   }
 };
 
@@ -103,7 +97,7 @@ const showUrlOverlay = (url, platform) => {
   overlay.id = "fact-check-url-overlay";
   overlay.className = "fact-check-url-overlay";
 
-  const platformName = platform === "youtube" ? "YouTube" : "Instagram";
+  const platformName = platform === "youtube" ? "YouTube" : "Video";
   const safeUrl = escapeHtml(url);
 
   overlay.innerHTML = `
@@ -192,7 +186,7 @@ const showFactCheckPopup = (data) => {
   removeExistingPopup();
 
   // 팝업 생성
-  const popup = createPopup(data);``
+  const popup = createPopup(data);
   document.body.appendChild(popup);
   console.log("Popup added to DOM");
 
@@ -320,11 +314,12 @@ const showResultModal = (data) => {
       ? `
         <div class="result-section">
           <h3>참고 레퍼런스</h3>
-          <ul class="reference-list">
+          <ul class="reference-list reference-list--compact">
             ${normalizedUrls
-              .map((url) => {
+              .map((url, index) => {
                 const safeUrl = escapeHtml(url);
-                return `<li><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></li>`;
+                const label = `항목 ${index + 1}`;
+                return `<li><a href="${safeUrl}" target="_blank" rel="noopener noreferrer" title="${safeUrl}">${label}</a></li>`;
               })
               .join("")}
           </ul>
@@ -454,7 +449,11 @@ const showErrorModal = (data) => {
       <div class="modal-body">
         <div class="error-message">
           <p>${formatErrorMessage(data.message)}</p>
-          ${data.error ? `<p class="error-detail">${formatErrorMessage(data.error)}</p>` : ""}
+          ${
+            data.error
+              ? `<p class="error-detail">${formatErrorMessage(data.error)}</p>`
+              : ""
+          }
         </div>
       </div>
     </div>
@@ -553,12 +552,7 @@ const showVideoResultModal = (data) => {
   modal.id = "fact-check-result-modal";
   modal.className = "fact-check-result-modal video";
 
-  const platformName =
-    data?.platform === "youtube"
-      ? "YouTube"
-      : data?.platform === "instagram"
-        ? "Instagram"
-        : "Video";
+  const platformName = data?.platform === "youtube" ? "YouTube" : "Video";
 
   const summaryText = data?.result
     ? escapeHtml(data.result)
@@ -592,8 +586,8 @@ const showVideoResultModal = (data) => {
   const references = Array.isArray(referencesRaw)
     ? referencesRaw
     : typeof referencesRaw === "string" && referencesRaw.length > 0
-      ? [referencesRaw]
-      : [];
+    ? [referencesRaw]
+    : [];
 
   const requestedUrl =
     typeof data?.requestedUrl === "string" && data.requestedUrl.length > 0
@@ -909,10 +903,35 @@ const getPageText = () => {
   return normalizedText;
 };
 
+const shouldSkipAutoFactCheckForUrl = (url) => {
+  if (!url || typeof url !== "string") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "15.165.34.51";
+  } catch (error) {
+    console.warn(
+      "Failed to parse URL for auto fact check exclusion:",
+      url,
+      error
+    );
+    return false;
+  }
+};
+
 // 자동 Fact Check 요청
 const requestAutoFactCheck = () => {
   if (!isBackgroundDetectionEnabled || !isGlobalFactCheckEnabled) {
     console.log("Auto fact check disabled by settings, skipping request");
+    return;
+  }
+
+  const currentUrl = window.location.href;
+  if (shouldSkipAutoFactCheckForUrl(currentUrl)) {
+    console.log("Auto fact check skipped for excluded domain:", currentUrl);
+    hasCheckedCurrentPage = true;
     return;
   }
 
@@ -1069,7 +1088,7 @@ const showApiUrlWarningOverlay = (message) => {
     <div class="api-url-warning-content">
       <div class="api-url-warning-icon">⚠️</div>
       <div class="api-url-warning-message">
-        <strong>API Base URL 설정 필요</strong>
+        <strong>API 연결 문제</strong>
         <p>${message}</p>
       </div>
       <button class="api-url-warning-close-btn" id="closeApiUrlWarningOverlay">✕</button>
@@ -1134,6 +1153,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     removeUrlOverlay();
     showVideoResultModal(request.data);
     showPageButtonAgain();
+  } else if (request.type === "SHOW_REQUEST_IN_PROGRESS") {
+    const message =
+      typeof request?.data?.message === "string" && request.data.message.trim()
+        ? request.data.message
+        : "이미 요청중인 작업이 있습니다.";
+    showErrorModal({ message });
   }
 });
 

@@ -1,6 +1,6 @@
 /* Content Script Styles - 웹페이지에 주입되는 팝업 스타일 */
 
-/* 페이지별 버튼 스타일 (YouTube, Instagram) */
+/* 페이지별 버튼 스타일 (YouTube) */
 .fact-check-page-button {
   position: fixed;
   bottom: 20px;
@@ -27,14 +27,6 @@
   background: rgba(102, 126, 234, 0.95);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-.fact-check-page-button.instagram {
-  background: rgba(225, 48, 108, 0.85);
-}
-
-.fact-check-page-button.instagram:hover {
-  background: rgba(225, 48, 108, 0.95);
 }
 
 .fact-check-page-button span {
@@ -803,6 +795,21 @@
   background: #667eea;
   color: white;
   transform: translateX(4px);
+}
+
+.reference-list--compact a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  word-break: normal;
+  min-width: 120px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  color: #4338ca;
+  border-left: none;
 }
 
 .share-result-button {
