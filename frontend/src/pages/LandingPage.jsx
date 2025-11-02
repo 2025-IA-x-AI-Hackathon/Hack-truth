@@ -1,7 +1,7 @@
 import { useScrollReveal } from "../hooks/useScrollReveal.js";
 
 const LandingPage = () => {
-  const [featureRef, featureVisible] = useScrollReveal({ threshold: 0.35 });
+  const [videoRef, videoVisible] = useScrollReveal({ threshold: 0.35 });
   const [experienceRef, experienceVisible] = useScrollReveal({
     threshold: 0.2,
   });
@@ -109,63 +109,30 @@ const LandingPage = () => {
       </section>
 
       <section
-        ref={featureRef}
-        className={`landing__section landing__section--feature reveal-section ${
-          featureVisible ? "reveal-section--visible" : ""
+        ref={videoRef}
+        className={`landing__section landing__section--video reveal-section ${
+          videoVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__section-header">
-          <h2>팩트체크 워크플로를 위한 핵심 경험</h2>
+          <h2>🎬 HackTruth 서비스 소개</h2>
           <p>
-            HackTruth는 단순히 결과를 보여주는 것을 넘어, Fact Check가 진행되는
-            순간의 맥락과 이유를 모두 안내합니다. 각 구성요소가 하나의 경험으로
-            연결됩니다.
+            1분 소개 영상으로 확장 프로그램의 핵심 기능과 사용 흐름을 빠르게
+            확인해보세요.
           </p>
         </div>
-        <div className="landing__feature-grid">
-          <article className="landing__feature-card">
-            <div className="landing__feature-icon" aria-hidden="true">
-              🎯
-            </div>
-            <h3>결과 모달</h3>
-            <p>
-              사실 여부, 판단 근거, 참조 링크를 하나의 뷰에 압축했습니다. 누구나
-              이해하기 쉽도록 구조화된 카드와 시각적 배지로 결론을 강조합니다.
-            </p>
-          </article>
-          <article className="landing__feature-card">
-            <div className="landing__feature-icon" aria-hidden="true">
-              👁️
-            </div>
-            <h3>실시간 오버레이</h3>
-            <p>
-              우측 하단 오버레이가 누구보다 먼저 경고합니다. 백그라운드 감지 중
-              감지된 허위 정보는 즉시 안내하고, 진행률과 상태를 동시에
-              표시합니다.
-            </p>
-          </article>
-          <article className="landing__feature-card">
-            <div className="landing__feature-icon" aria-hidden="true">
-              ⏱️
-            </div>
-            <h3>로딩 피드백</h3>
-            <p>
-              작은 로딩 애니메이션으로 사용자는 언제든 HackTruth가 일하고 있다는
-              사실을 알 수 있습니다. 처리 단계와 남은 흐름을 직관적으로
-              이해시킵니다.
-            </p>
-          </article>
-          <article className="landing__feature-card">
-            <div className="landing__feature-icon" aria-hidden="true">
-              🔁
-            </div>
-            <h3>공유 링크</h3>
-            <p>
-              클릭 한 번으로 결과와 근거가 담긴 링크가 발급됩니다. 조사 맥락을
-              그대로 전파하며, 협업과 인용에 필요한 정보를 손쉽게 전달할 수
-              있습니다.
-            </p>
-          </article>
+        <div className="landing__video-wrapper">
+          <video
+            className="landing__video"
+            controls
+            preload="metadata"
+            playsInline
+          >
+            <source src="/service-intro.mp4" type="video/mp4" />
+            브라우저가 video 태그를 지원하지 않는 경우,{" "}
+            <a href="/service-intro.mp4">HackTruth 소개 영상</a>을 대신 열어
+            확인해주세요.
+          </video>
         </div>
       </section>
 
