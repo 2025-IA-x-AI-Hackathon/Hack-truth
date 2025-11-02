@@ -1,8 +1,9 @@
+import asyncio
 import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 from urllib.parse import ParseResult, urlparse
 
@@ -25,6 +26,7 @@ from .schemas import (
     VerificationResponse,
     VerificationResult,
     VideoRequest,
+    VideoFactCheckResult,
     VideoResponse,
 )
 from .check_video import (
@@ -34,6 +36,8 @@ from .check_video import (
     predict_ai_video,
     sample_frames,
     safe_float,
+    transcribe_video_audio,
+    canonicalize_youtube_url,
 )
 from .gemini_service import (
     GeminiConfigurationError,
@@ -43,7 +47,14 @@ from .gemini_service import (
     get_image_verifier,
     get_verifier,
 )
-from .db import init_db_pool, close_db_pool, insert_verification_record, fetch_verification_record
+from .db import (
+    init_db_pool,
+    close_db_pool,
+    insert_verification_record,
+    fetch_verification_record,
+    fetch_video_analysis_record,
+    upsert_video_analysis_record,
+)
 
 
 def _load_env() -> bool:
@@ -76,6 +87,11 @@ else:
     logger.debug("No .env file found; relying on process environment")
 
 GEMINI_MAX_ATTEMPTS = max(1, int(os.environ.get("GEMINI_VERIFICATION_ATTEMPTS", "2")))
+YOUTUBE_COOKIES_PATH = os.environ.get("YOUTUBE_COOKIES_PATH", "cookies.txt")
+VIDEO_FRAME_SAMPLE_RATE = max(1, int(os.environ.get("VIDEO_FRAME_SAMPLE_RATE", "30")))
+
+_video_tasks: Dict[str, asyncio.Task] = {}
+_video_tasks_lock = asyncio.Lock()
 
 app = FastAPI(
     title="HackTruth Backend",
@@ -232,6 +248,229 @@ async def _download_image_bytes(image_url: str) -> tuple[bytes, str]:
         )
 
     return content, (content_type or "image/jpeg")
+
+
+def _format_score(value: Optional[float]) -> str:
+    try:
+        normalized = safe_float(value)
+    except Exception:
+        normalized = 0.0
+    return f"{normalized:.4f}"
+
+
+def _build_fact_check_payload(result: Optional[VerificationResult]) -> Optional[VideoFactCheckResult]:
+    if result is None:
+        return None
+    urls = result.urls if result.urls is not None else []
+    return VideoFactCheckResult(
+        accuracy=result.accuracy,
+        accuracy_reason=result.accuracy_reason,
+        reason=result.reason,
+        urls=urls,
+    )
+
+
+def _build_video_response(
+    *,
+    fft_score: Optional[float],
+    motion_score: Optional[float],
+    ai_result: Optional[str],
+    transcript: Optional[str],
+    transcript_srt: Optional[str],
+    fact_result: Optional[VerificationResult],
+    record_id: Optional[UUID],
+    video_id: Optional[str],
+    duration: Optional[float],
+    cached: bool,
+) -> VideoResponse:
+    return VideoResponse(
+        fft_artifact_score=_format_score(fft_score),
+        action_pattern_score=_format_score(motion_score),
+        result=ai_result or "분석 결과를 생성하지 못했습니다.",
+        transcript=transcript,
+        transcript_srt=transcript_srt,
+        fact_check=_build_fact_check_payload(fact_result),
+        cached=cached,
+        record_id=record_id,
+        video_id=video_id,
+        duration=duration,
+    )
+
+
+def _record_to_video_response(record: Dict[str, Any]) -> VideoResponse:
+    fact_payload = None
+    if record.get("fact_accuracy"):
+        fact_payload = VideoFactCheckResult(
+            accuracy=record["fact_accuracy"],
+            accuracy_reason=record.get("fact_accuracy_reason") or "",
+            reason=record.get("fact_reason") or "",
+            urls=record.get("fact_urls") or [],
+        )
+
+    return VideoResponse(
+        fft_artifact_score=_format_score(record.get("fft_score")),
+        action_pattern_score=_format_score(record.get("motion_score")),
+        result=record.get("ai_result") or "분석 결과를 생성하지 못했습니다.",
+        transcript=record.get("transcript"),
+        transcript_srt=record.get("transcript_srt"),
+        fact_check=fact_payload,
+        cached=True,
+        record_id=record.get("id"),
+        video_id=record.get("video_id"),
+        duration=record.get("duration"),
+    )
+
+
+async def _compute_video_metrics(video_path: str) -> Tuple[float, float, str]:
+    def _worker() -> Tuple[float, float, str]:
+        frames = sample_frames(video_path, sample_rate=VIDEO_FRAME_SAMPLE_RATE)
+        if not frames:
+            raise ValueError("영상 프레임을 추출하지 못했습니다.")
+        fft_score = safe_float(analyze_fft(frames))
+        motion_score = safe_float(analyze_motion(frames))
+        verdict = predict_ai_video(fft_score, motion_score)
+        return fft_score, motion_score, verdict
+
+    return await asyncio.to_thread(_worker)
+
+
+async def _run_fact_check(transcript_text: Optional[str]) -> Tuple[Optional[VerificationResult], Optional[str]]:
+    if not transcript_text or not transcript_text.strip():
+        return None, None
+
+    try:
+        verifier = get_verifier()
+    except GeminiConfigurationError as exc:
+        logger.exception("Gemini configuration error while initializing verifier")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Gemini 구성 오류로 팩트체크를 수행할 수 없습니다.",
+        ) from exc
+
+    last_error: Optional[Exception] = None
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            return await run_in_threadpool(verifier.verify, transcript_text)
+        except GeminiVerificationError as exc:
+            last_error = exc
+            logger.warning(
+                "Gemini fact-check attempt %d/%d failed: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc,
+            )
+        except Exception as exc:
+            logger.exception("Unexpected Gemini fact-check error")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Gemini 팩트체크 중 예기치 못한 오류가 발생했습니다.",
+            ) from exc
+
+    logger.warning(
+        "Gemini fact-check failed after %d attempts: %s",
+        GEMINI_MAX_ATTEMPTS,
+        last_error,
+    )
+    return None, None
+
+
+async def _process_video_analysis(
+    *,
+    requested_url: str,
+    canonical_url: str,
+    video_id: Optional[str],
+) -> VideoResponse:
+    logger.debug("Starting video analysis: requested_url=%s canonical_url=%s", requested_url, canonical_url)
+    try:
+        download_result = await run_in_threadpool(
+            download_youtube_video,
+            canonical_url,
+            YOUTUBE_COOKIES_PATH,
+        )
+    except Exception as exc:
+        logger.exception("Failed to download video: %s", canonical_url)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"영상 다운로드 중 오류가 발생했습니다: {exc}",
+        ) from exc
+
+    video_path = str(download_result.path)
+    metrics_task = asyncio.create_task(_compute_video_metrics(video_path))
+    transcription_task = asyncio.create_task(asyncio.to_thread(transcribe_video_audio, video_path))
+
+    try:
+        fft_score, motion_score, ai_result = await metrics_task
+    except Exception as exc:
+        transcription_task.cancel()
+        try:
+            await transcription_task
+        except asyncio.CancelledError:
+            pass
+        logger.exception("Video frame analysis failed for %s", canonical_url)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"영상 프레임 분석 중 오류가 발생했습니다: {exc}",
+        ) from exc
+
+    try:
+        transcription = await transcription_task
+    except Exception as exc:
+        logger.exception("Whisper transcription failed for %s", canonical_url)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Whisper 전사 중 오류가 발생했습니다: {exc}",
+        ) from exc
+
+    fact_result, raw_fact_response = await _run_fact_check(transcription.text)
+
+    duration = transcription.duration or (
+        float(download_result.duration) if download_result.duration is not None else None
+    )
+
+    try:
+        record_id = await upsert_video_analysis_record(
+            video_url=download_result.url,
+            video_id=download_result.video_id or video_id,
+            video_path=video_path,
+            fft_score=fft_score,
+            motion_score=motion_score,
+            ai_result=ai_result,
+            transcript=transcription.text,
+            transcript_srt=transcription.srt,
+            duration=duration,
+            fact_accuracy=fact_result.accuracy if fact_result else None,
+            fact_accuracy_reason=fact_result.accuracy_reason if fact_result else None,
+            fact_reason=fact_result.reason if fact_result else None,
+            fact_urls=fact_result.urls if fact_result else None,
+            raw_fact_response=raw_fact_response,
+        )
+    except Exception as exc:
+        logger.exception("Failed to persist video analysis result")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="영상 분석 결과를 저장하는 중 오류가 발생했습니다.",
+        ) from exc
+
+    logger.debug(
+        "Video analysis completed: url=%s fft=%.4f motion=%.4f fact_check=%s",
+        download_result.url,
+        fft_score,
+        motion_score,
+        "yes" if fact_result else "no",
+    )
+
+    return _build_video_response(
+        fft_score=fft_score,
+        motion_score=motion_score,
+        ai_result=ai_result,
+        transcript=transcription.text,
+        transcript_srt=transcription.srt,
+        fact_result=fact_result,
+        record_id=record_id,
+        video_id=download_result.video_id or video_id,
+        duration=duration,
+        cached=False,
+    )
 
 
 @app.get("/health", tags=["meta"])
@@ -505,28 +744,70 @@ async def verify_image_with_gemini(
 
 
 @app.post(
-        "/verify/video",
-        response_model=VideoResponse,
-        tags=["verification"],
-        status_code=status.HTTP_200_OK,
+    "/verify/video",
+    response_model=VideoResponse,
+    tags=["verification"],
+    status_code=status.HTTP_200_OK,
 )
-def analyze_video(data: VideoRequest):
+async def analyze_video(data: VideoRequest) -> VideoResponse:
+    normalized_url, video_id = canonicalize_youtube_url(data.url)
+    canonical_url = (normalized_url or data.url or "").strip()
+
+    if not canonical_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="유효한 영상 URL을 입력해주세요.",
+        )
+
     try:
-        video_path = download_youtube_video(data.url)
-        frames = sample_frames(video_path, sample_rate=30)
-        fft_score = safe_float(analyze_fft(frames))
-        motion_score = safe_float(analyze_motion(frames))
-        result = predict_ai_video(fft_score, motion_score)
+        cached_record = await fetch_video_analysis_record(canonical_url, video_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch cached video analysis for %s", canonical_url)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="이전 영상 분석 기록을 조회하지 못했습니다.",
+        ) from exc
 
+    if cached_record:
+        logger.debug("Serving cached video analysis for url=%s", canonical_url)
+        return _record_to_video_response(cached_record)
 
-        return VideoResponse(
-            fft_artifact_score=str(fft_score),
-            action_pattern_score=str(motion_score),
-            result=result
-        )
-    except Exception as e:
-        return VideoResponse(
-            fft_artifact_score="0",
-            action_pattern_score="0",
-            result=f"분석 실패: {str(e)}"
-        )
+    async with _video_tasks_lock:
+        task = _video_tasks.get(canonical_url)
+        created_task = False
+
+        if task is None:
+            created_task = True
+            task = asyncio.create_task(
+                _process_video_analysis(
+                    requested_url=data.url,
+                    canonical_url=canonical_url,
+                    video_id=video_id,
+                )
+            )
+            _video_tasks[canonical_url] = task
+
+            def _cleanup(fut: asyncio.Future, *, key: str = canonical_url) -> None:
+                _video_tasks.pop(key, None)
+
+            task.add_done_callback(_cleanup)
+
+    try:
+        response = await task
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error during video analysis task")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="영상 분석 중 예기치 못한 오류가 발생했습니다.",
+        ) from exc
+
+    if isinstance(response, VideoResponse) and not created_task:
+        return response.model_copy(update={"cached": True})
+
+    if isinstance(response, VideoResponse):
+        return response
+
+    # Fallback: coerce dict-like result to Pydantic model
+    return VideoResponse(**response)
