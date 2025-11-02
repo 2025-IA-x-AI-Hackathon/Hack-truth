@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Fact Check</title>
+    <title>HackTruth · Fact Check</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
@@ -11,16 +11,19 @@
       <div class="header">
         <div class="logo">
           <span class="logo-icon">🔍</span>
-          <h1>Fact Check</h1>
+          <div class="logo-text">
+            <h1>HackTruth</h1>
+            <p class="logo-subtitle">Fact Check</p>
+          </div>
         </div>
       </div>
 
       <div class="content">
         <div class="description">
-          <h2>환영합니다! 👋</h2>
+          <h2>HackTruth에 오신 것을 환영합니다! 👋</h2>
           <p>
-            Fact Check는 웹에서 발견한 정보의 신뢰성을 확인하는 데 도움을 주는
-            확장 프로그램입니다.
+            HackTruth는 웹에서 마주한 콘텐츠의 신뢰도를 빠르게 확인할 수 있는
+            팩트체크 도구입니다.
           </p>
 
           <div class="features">
@@ -30,26 +33,34 @@
                 <span class="feature-icon">📝</span>
                 <div>
                   <strong>텍스트 팩트 체크</strong>
-                  <p>텍스트를 드래그하고 우클릭하여 사실 가능성을 확인하세요</p>
+                  <p>드래그한 텍스트를 우클릭해 사실 가능성을 확인합니다.</p>
                 </div>
               </li>
               <li>
                 <span class="feature-icon">🖼️</span>
                 <div>
-                  <strong>이미지 검증</strong>
-                  <p>이미지를 우클릭하여 AI 생성 여부를 확인하세요</p>
+                  <strong>이미지 팩트 체크</strong>
+                  <p>이미지를 우클릭해 AI 생성 여부와 조작 징후를 분석합니다.</p>
+                </div>
+              </li>
+              <li>
+                <span class="feature-icon">🎬</span>
+                <div>
+                  <strong>유튜브 영상/쇼츠 검증</strong>
+                  <p>AI 생성 영상 여부와 거짓 주장 가능성을 판별합니다.</p>
                 </div>
               </li>
             </ul>
           </div>
 
           <div class="usage">
-            <h3>사용 방법</h3>
-            <ol>
-              <li>웹페이지에서 텍스트를 드래그하거나 이미지를 찾습니다</li>
-              <li>우클릭하여 "Fact Check" 메뉴를 선택합니다</li>
-              <li>팩트 체크 결과를 확인합니다</li>
-            </ol>
+            <h3>서비스 소개</h3>
+            <p class="usage-description">
+              <strong>유튜브 영상/쇼츠 검증</strong> : AI 생성 영상 유무 및 거짓 주장
+              판별<br />
+              <strong>백그라운드 감지</strong> : 방문한 페이지의 거짓정보인 텍스트가
+              포함되어있는지 가능성을 판별합니다.
+            </p>
           </div>
         </div>
 
@@ -74,24 +85,6 @@
               <input type="checkbox" id="backgroundDetectionToggle" checked />
               <span class="slider"></span>
             </label>
-          </div>
-
-          <!-- API URL 설정 -->
-          <div class="setting-item api-url-setting">
-            <div class="setting-info">
-              <strong>API Base URL</strong>
-              <p>팩트 체크 API 서버 주소를 입력하세요</p>
-            </div>
-            <div class="api-url-input-container">
-              <input 
-                type="url" 
-                id="apiUrlInput" 
-                placeholder="https://api.example.com"
-                class="api-url-input"
-              />
-              <button id="saveApiUrlBtn" class="save-api-url-btn">저장</button>
-              <p id="apiUrlStatus" class="api-url-status"></p>
-            </div>
           </div>
 
         </div>

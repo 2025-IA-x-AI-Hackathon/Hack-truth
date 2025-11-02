@@ -5,8 +5,6 @@ const LandingPage = () => {
   const [experienceRef, experienceVisible] = useScrollReveal({
     threshold: 0.2,
   });
-  const [flowRef, flowVisible] = useScrollReveal({ threshold: 0.25 });
-  const [shareRef, shareVisible] = useScrollReveal({ threshold: 0.25 });
   const [installRef, installVisible] = useScrollReveal({ threshold: 0.2 });
   const [ctaRef, ctaVisible] = useScrollReveal({ threshold: 0.5 });
 
@@ -30,8 +28,8 @@ const LandingPage = () => {
             </p>
             <ul className="landing__hero-highlights">
               <li>
-                <span aria-hidden="true">⚡</span> 3분 이내 완료되는 신속한 Fact
-                Check
+                <span aria-hidden="true">⚡</span> 20초 이내 완료되는 신속한
+                Fact Check (이미지, 텍스트)
               </li>
               <li>
                 <span aria-hidden="true">🛡️</span> 오버레이 경고로 실시간 허위
@@ -62,12 +60,17 @@ const LandingPage = () => {
             <div className="hero-card hero-card--modal">
               <span className="hero-card__label">Fact Check Modal</span>
               <div className="hero-card__result">
-                <strong>AI 포함 징후</strong>
-                <p>콘텐츠 전반에서 생성형 AI 음성 특성이 확인되었습니다.</p>
+                <strong>거짓된 정보 가능성</strong>
+                <p>
+                  요청하신 정보에 거짓된 정보가 포함되어있을 확률이 높습니다.
+                </p>
               </div>
               <div className="hero-card__reference">
                 <span>근거</span>
-                <p>동영상 프레임 분석 · 음성 포먼트 비교 · 검증된 뉴스 기사</p>
+                <p>
+                  팩트 체크 모델의 분석 결과 및 러페런스 링크를 확인할 수
+                  있습니다.
+                </p>
               </div>
               <button type="button" className="hero-card__action">
                 결과 공유하기
@@ -84,23 +87,23 @@ const LandingPage = () => {
 
             <div className="hero-card hero-card--loading">
               <div className="hero-card__spinner" />
-              <p>백그라운드 텍스트 감지 · Fact Check 준비 중</p>
+              <p>백그라운드 텍스트 감지 중...</p>
             </div>
           </div>
         </div>
 
         <div className="landing__hero-stats">
           <div className="landing__stat-card">
-            <strong>30%+</strong>
-            <span>허위 정보 노출 전 경고 발생률</span>
+            <strong>90%+</strong>
+            <span>텍스트/이미지 팩트 체크 성공률</span>
           </div>
           <div className="landing__stat-card">
-            <strong>60초</strong>
-            <span>평균 Fact Check 완료 속도</span>
+            <strong>10초 내외</strong>
+            <span>AI 생성형 이미지 판별 속도</span>
           </div>
           <div className="landing__stat-card">
-            <strong>24/7</strong>
-            <span>스크롤 멈춤 시 자동 감시</span>
+            <strong>24시간/7일</strong>
+            <span>백그라운드 감지 가능</span>
           </div>
         </div>
       </section>
@@ -186,7 +189,7 @@ const LandingPage = () => {
             <span className="landing__flow-badge">영상</span>
             <h3>스트리밍 콘텐츠 Fact Check</h3>
             <ul>
-              <li>유튜브/인스타그램 영상 우측 하단에 Fact Check 버튼 노출</li>
+              <li>유튜브 영상 우측 하단에 Fact Check 버튼 노출</li>
               <li>버튼 클릭 시 오버레이가 요청 처리 중임을 안내</li>
               <li>
                 검증 완료 후 모달에서 AI 포함 여부, 허위 정보, 레퍼런스 제공
@@ -198,7 +201,7 @@ const LandingPage = () => {
             <span className="landing__flow-badge">이미지</span>
             <h3>이미지 진위 확인</h3>
             <ul>
-              <li>이미지 우클릭 → HackTruth Fact Check 선택</li>
+              <li>이미지 우클릭 → Fact Check 선택</li>
               <li>오버레이가 처리 진행 상황을 표시</li>
               <li>결과 모달에서 판정 점수, 판단 이유, 참고 자료 확인</li>
             </ul>
@@ -206,7 +209,7 @@ const LandingPage = () => {
 
           <article className="landing__flow-card">
             <span className="landing__flow-badge">텍스트</span>
-            <h3>드래그한 문장도 즉시 검증</h3>
+            <h3>드래그한 텍스트도 즉시 검증</h3>
             <ul>
               <li>텍스트 선택 후 팩트체크 옵션 클릭</li>
               <li>우측 하단 오버레이로 진행 상태 안내</li>
@@ -218,110 +221,12 @@ const LandingPage = () => {
 
           <article className="landing__flow-card">
             <span className="landing__flow-badge">백그라운드 감지</span>
-            <h3>멈춰있는 순간도 감지</h3>
+            <h3>방문한 페이지에서 거짓 정보 가능성 감지</h3>
             <ul>
-              <li>스크롤이 멈추면 현재 화면 텍스트 자동 분석</li>
+              <li>방문한 페이지에서 텍스트 자동 분석</li>
               <li>거짓 정보 가능성이 있으면 오버레이 경고 노출</li>
-              <li>다른 페이지로 이동해도 경고에 URL을 함께 표시</li>
             </ul>
           </article>
-        </div>
-      </section>
-
-      <section
-        ref={flowRef}
-        className={`landing__section landing__section--process reveal-section ${
-          flowVisible ? "reveal-section--visible" : ""
-        }`}
-      >
-        <div className="landing__section-header">
-          <h2>Fact Check는 이렇게 완성됩니다</h2>
-          <p>
-            HackTruth는 요청 순간부터 결과 공유까지 단계별로 시각적 피드백을
-            제공해 혼란을 줄여줍니다.
-          </p>
-        </div>
-        <ol className="landing__process">
-          <li>
-            <span className="landing__process-step">01</span>
-            <div>
-              <h3>콘텐츠 선택 & 요청</h3>
-              <p>
-                영상 버튼, 이미지 우클릭, 텍스트 드래그 등 상황에 맞는 시작점을
-                제공합니다.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span className="landing__process-step">02</span>
-            <div>
-              <h3>분석 & 감지</h3>
-              <p>
-                오버레이와 로딩 애니메이션으로 분석 상태를 투명하게 공유합니다.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span className="landing__process-step">03</span>
-            <div>
-              <h3>결과 요약</h3>
-              <p>
-                모달에서 Fact Check 결과, 허위 여부, 근거, 참고 링크를 요약해
-                전달합니다.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span className="landing__process-step">04</span>
-            <div>
-              <h3>공유 & 기록</h3>
-              <p>
-                공유하기 버튼으로 HackTruth 웹 페이지에 기록하고, 협업 공간에
-                근거를 남길 수 있습니다.
-              </p>
-            </div>
-          </li>
-        </ol>
-      </section>
-
-      <section
-        ref={shareRef}
-        className={`landing__section landing__section--share reveal-section ${
-          shareVisible ? "reveal-section--visible" : ""
-        }`}
-      >
-        <div className="landing__section-header">
-          <h2>팩트체크 결과를 더 널리</h2>
-          <p>
-            HackTruth 공유 링크는 신뢰할 수 있는 근거와 함께 커뮤니티, 팀,
-            고객에게 전달할 수 있습니다. 확장 프로그램을 설치하면 검증, 기록,
-            공유까지 한 번에 연결됩니다.
-          </p>
-        </div>
-        <div className="landing__share-callout">
-          <div className="landing__share-meta">
-            <div>
-              <strong>근거 중심</strong>
-              <span>Fact Check 사유 · 참고 출처를 그대로 보존</span>
-            </div>
-            <div>
-              <strong>퍼블릭 페이지</strong>
-              <span>누구나 접근 가능한 전용 결과 페이지 제공</span>
-            </div>
-            <div>
-              <strong>식별 가능한 링크</strong>
-              <span>쿼리 파라미터로 결과를 정확히 추적</span>
-            </div>
-          </div>
-          <p>
-            아직 설치하지 않았다면 아래 버튼을 눌러 설치 가이드를 따라주세요.
-          </p>
-          <a
-            href="#install-guide"
-            className="landing__cta landing__cta--primary"
-          >
-            익스텐션 설치하기
-          </a>
         </div>
       </section>
 
@@ -342,6 +247,20 @@ const LandingPage = () => {
 
         <ol className="landing__install-steps">
           <li>
+            <h3>프로젝트 다운로드</h3>
+            <p>
+              <a
+                className="landing__link"
+                href="https://github.com/2025-IA-x-AI-Hackathon/Hack-truth/archive/refs/heads/main.zip"
+                target="_blank"
+                rel="noreferrer"
+              >
+                HackTruth 다운로드
+              </a>
+              이 버튼을 눌러 ZIP 파일을 내려받고 압축을 풀어주세요.
+            </p>
+          </li>
+          <li>
             <h3>Chrome 브라우저에서 개발자 모드 열기</h3>
             <p>
               주소창에 <code>chrome://extensions/</code> 를 입력하거나 메뉴 &gt;
@@ -360,20 +279,6 @@ const LandingPage = () => {
             />
           </li>
           <li>
-            <h3>프로젝트 다운로드</h3>
-            <p>
-              <a
-                className="landing__link"
-                href="https://github.com/2025-IA-x-AI-Hackathon/Hack-truth/archive/refs/heads/main.zip"
-                target="_blank"
-                rel="noreferrer"
-              >
-                HackTruth GitHub 저장소
-              </a>
-              에서 ZIP 파일을 내려받고 압축을 풉니다.
-            </p>
-          </li>
-          <li>
             <h3>압축 해제한 확장 프로그램 로드</h3>
             <p>
               &ldquo;압축해제된 확장 프로그램을 로드합니다&rdquo; 버튼을 눌러
@@ -388,54 +293,7 @@ const LandingPage = () => {
               고정하세요.
             </p>
           </li>
-          <li>
-            <h3>API Base URL 입력</h3>
-            <p>
-              확장 프로그램 아이콘을 클릭해 설정 화면을 열고 &ldquo;API Base
-              URL&rdquo; 항목에 팩트 체크
-              API 서버 주소를 입력한 뒤 저장하세요. 입력하지 않으면 팩트 체크
-              요청이 진행되지 않습니다.
-            </p>
-          </li>
         </ol>
-
-        <div className="landing__usage">
-          <h3>📖 사용 방법</h3>
-          <div className="landing__usage-grid">
-            <article>
-              <h4>텍스트 팩트 체크</h4>
-              <ul>
-                <li>팩트 체크할 텍스트를 드래그 후 우클릭</li>
-                <li>&ldquo;Fact Check (텍스트)&rdquo; 선택</li>
-                <li>사실 가능성, 상세 설명, 레퍼런스 링크 확인</li>
-              </ul>
-            </article>
-            <article>
-              <h4>이미지 팩트 체크</h4>
-              <ul>
-                <li>검증할 이미지에서 우클릭</li>
-                <li>&ldquo;Fact Check (이미지)&rdquo; 선택</li>
-                <li>AI 생성 여부와 신뢰도, 분석 상세 확인</li>
-              </ul>
-            </article>
-            <article>
-              <h4>영상 팩트 체크</h4>
-              <ul>
-                <li>유튜브/인스타그램 영상 우측 하단 버튼 클릭</li>
-                <li>검증이 완료될 때까지 기다리기 (최대 1분)</li>
-                <li>AI 포함 여부와 주장 진위 결과 확인</li>
-              </ul>
-            </article>
-            <article>
-              <h4>백그라운드 감지 & 설정</h4>
-              <ul>
-                <li>스크롤이 멈추면 페이지 텍스트 자동 분석</li>
-                <li>허위 정보 의심 시 오버레이 경고 표시</li>
-                <li>툴바 아이콘에서 기능 토글 및 감지 설정</li>
-              </ul>
-            </article>
-          </div>
-        </div>
       </section>
 
       <section
