@@ -17,29 +17,19 @@ const getApiBaseUrl = async () => {
   });
 };
 
-const getShareBaseUrl = async () => {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(["shareBaseUrl"], (result) => {
-      if (result.shareBaseUrl) {
-        resolve(result.shareBaseUrl);
-      } else {
-        resolve(null);
-      }
-    });
-  });
-};
+const SHARE_BASE_URL = "http://15.165.34.51/share";
 
-const buildShareUrl = (baseUrl, recordId) => {
-  if (!baseUrl || !recordId) {
+const buildShareUrl = (recordId) => {
+  if (!recordId) {
     return null;
   }
 
   try {
-    const url = new URL(baseUrl);
-    url.searchParams.set("id", recordId);
-    return url.toString();
+    const shareUrl = new URL(SHARE_BASE_URL);
+    shareUrl.searchParams.set("id", recordId);
+    return shareUrl.toString();
   } catch (error) {
-    console.warn("Invalid share base URL provided:", error);
+    console.warn("Failed to construct share URL:", error);
     return null;
   }
 };
@@ -74,7 +64,7 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("Fact Check extension installed");
 
   chrome.storage.sync.get(
-    ["isFactCheckEnabled", "isBackgroundDetectionEnabled", "shareBaseUrl"],
+    ["isFactCheckEnabled", "isBackgroundDetectionEnabled"],
     (result) => {
       const updates = {};
 
@@ -84,10 +74,6 @@ chrome.runtime.onInstalled.addListener(() => {
 
       if (typeof result.isBackgroundDetectionEnabled !== "boolean") {
         updates.isBackgroundDetectionEnabled = true;
-      }
-
-      if (typeof result.shareBaseUrl !== "string") {
-        updates.shareBaseUrl = "";
       }
 
       if (Object.keys(updates).length > 0) {
@@ -179,8 +165,7 @@ const handleTextFactCheck = async (info, tab) => {
       console.log("Response Body:", JSON.stringify(response, null, 2));
       console.log("==============================================");
 
-      const shareBaseUrl = await getShareBaseUrl();
-      const shareUrl = buildShareUrl(shareBaseUrl, response.record_id);
+      const shareUrl = buildShareUrl(response.record_id);
 
       // 성공 시 결과 모달 표시
       sendMessageToTab(tab.id, {
@@ -412,6 +397,117 @@ const fetchImageFactCheckAPI = async (imageUrl, apiBaseUrl) => {
   }
 };
 
+const buildVideoVerificationUrl = (apiBaseUrl) => {
+  try {
+    const parsedBase = new URL(apiBaseUrl);
+
+    // 임시 개발 요구사항: 비디오 검증 엔드포인트는 4242 포트를 사용
+    parsedBase.port = "4242";
+
+    const basePath = (parsedBase.pathname || "").replace(/\/+$/, "");
+    const mergedPath = `${basePath}/verify/video`.replace(/\/{2,}/g, "/");
+
+    return `${parsedBase.origin}${mergedPath.startsWith("/") ? mergedPath : `/${mergedPath}`}`;
+  } catch (error) {
+    console.error(
+      "Failed to build video verification URL from base:",
+      apiBaseUrl,
+      error
+    );
+    throw new Error("API Base URL이 올바르지 않습니다. 올바른 형식인지 확인해주세요.");
+  }
+};
+
+const fetchVideoFactCheckAPI = async (contentUrl, apiBaseUrl) => {
+  const endpointUrl = buildVideoVerificationUrl(apiBaseUrl);
+  const requestBody = { url: contentUrl };
+
+  console.log("========== Video API Request ==========");
+  console.log("URL:", endpointUrl);
+  console.log("Method: POST");
+  console.log("Request Body:", JSON.stringify(requestBody, null, 2));
+  console.log("=======================================");
+
+  try {
+    const response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log("Video API Response Status:", response.status);
+    console.log(
+      "Video API Response Headers:",
+      response.headers.get("content-type")
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const textResponse = await response.text();
+      console.error(
+        "Video API Non-JSON response received:",
+        textResponse.substring(0, 500)
+      );
+
+      if (response.status === 404) {
+        throw new Error(
+          `비디오 팩트 체크 API 엔드포인트를 찾을 수 없습니다. URL을 확인해주세요: ${endpointUrl}`
+        );
+      } else if (response.status === 0 || response.status === 500) {
+        throw new Error(
+          `비디오 팩트 체크 서버 오류가 발생했습니다. API 서버가 정상적으로 작동하는지 확인해주세요.`
+        );
+      } else if (
+        textResponse.includes("<!doctype") ||
+        textResponse.includes("<!DOCTYPE")
+      ) {
+        throw new Error(
+          `비디오 팩트 체크 API 서버가 HTML을 반환했습니다. API URL이 올바른지 확인해주세요.\n요청 URL: ${endpointUrl}\n응답 상태: ${response.status}`
+        );
+      } else {
+        throw new Error(
+          `예상치 못한 비디오 API 응답 형식입니다. (Content-Type: ${contentType})`
+        );
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("========== Video API Error Response ==========");
+      console.error("Status:", response.status);
+      console.error("Status Text:", response.statusText);
+      console.error("Error Body:", errorText);
+      console.error("================================================");
+      throw new Error(
+        `비디오 팩트 체크 API 요청 실패 (${response.status}): ${response.statusText}`
+      );
+    }
+
+    const jsonData = await response.json();
+    console.log("========== Video API Response ==========");
+    console.log("Response Body:", JSON.stringify(jsonData, null, 2));
+    console.log("========================================");
+    return jsonData;
+  } catch (error) {
+    console.error("========== Video API Request Error ==========");
+    console.error("Error:", error);
+    console.error("=============================================");
+
+    if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError")
+    ) {
+      throw new Error(
+        `비디오 팩트 체크 API 서버에 연결할 수 없습니다.\n\n가능한 원인:\n1. API URL이 올바른지 확인해주세요: ${endpointUrl}\n2. 서버가 실행 중인지 확인해주세요\n3. CORS 설정이 올바른지 확인해주세요`
+      );
+    }
+
+    throw error;
+  }
+};
+
 // 이미지 팩트 체크 처리
 const handleImageFactCheck = async (info, tab) => {
   const imageUrl = info.srcUrl;
@@ -490,6 +586,72 @@ const handleImageFactCheck = async (info, tab) => {
         },
       });
     }
+  }
+};
+
+const handleVideoFactCheck = async (contentUrl, platform, tabId) => {
+  if (!contentUrl) {
+    throw new Error("영상 URL이 존재하지 않습니다.");
+  }
+
+  const apiBaseUrl = await getApiBaseUrl();
+  if (!apiBaseUrl) {
+    sendMessageToTab(tabId, {
+      type: "SHOW_API_URL_WARNING",
+      data: {
+        message:
+          "API Base URL이 설정되지 않았습니다. 팝업에서 API Base URL을 설정해주세요.",
+      },
+    });
+    throw new Error("API Base URL이 설정되지 않았습니다.");
+  }
+
+  try {
+    const response = await fetchVideoFactCheckAPI(contentUrl, apiBaseUrl);
+
+    const payload = {
+      platform,
+      requestedUrl: contentUrl,
+      fftArtifactScore: response.fft_artifact_score ?? "",
+      actionPatternScore: response.action_pattern_score ?? "",
+      result: response.result ?? "",
+      rawResponse: response,
+    };
+
+    sendMessageToTab(tabId, {
+      type: "SHOW_VIDEO_RESULT_MODAL",
+      data: payload,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("Video fact check failed:", error);
+
+    const isApiUrlError =
+      error.message.includes("API URL") ||
+      error.message.includes("API 서버에 연결할 수 없습니다") ||
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError");
+
+    if (isApiUrlError) {
+      sendMessageToTab(tabId, {
+        type: "SHOW_API_URL_WARNING",
+        data: {
+          message:
+            "API Base URL을 확인해주세요. 잘못된 URL이거나 서버에 연결할 수 없습니다.",
+        },
+      });
+    } else {
+      sendMessageToTab(tabId, {
+        type: "SHOW_ERROR",
+        data: {
+          message: "영상 팩트 체크 요청 중 오류가 발생했습니다.",
+          error: error.message,
+        },
+      });
+    }
+
+    throw error;
   }
 };
 

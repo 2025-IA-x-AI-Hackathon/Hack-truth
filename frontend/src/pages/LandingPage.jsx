@@ -1,8 +1,10 @@
-import { useScrollReveal } from '../hooks/useScrollReveal.js';
+import { useScrollReveal } from "../hooks/useScrollReveal.js";
 
 const LandingPage = () => {
   const [featureRef, featureVisible] = useScrollReveal({ threshold: 0.35 });
-  const [experienceRef, experienceVisible] = useScrollReveal({ threshold: 0.2 });
+  const [experienceRef, experienceVisible] = useScrollReveal({
+    threshold: 0.2,
+  });
   const [flowRef, flowVisible] = useScrollReveal({ threshold: 0.25 });
   const [shareRef, shareVisible] = useScrollReveal({ threshold: 0.25 });
   const [installRef, installVisible] = useScrollReveal({ threshold: 0.2 });
@@ -13,32 +15,44 @@ const LandingPage = () => {
       <section className="landing__hero">
         <div className="landing__hero-inner">
           <div className="landing__hero-content">
-            <p className="landing__eyebrow">Chrome Extension · 실시간 팩트체킹</p>
+            <p className="landing__eyebrow">
+              Chrome Extension · 실시간 팩트체킹
+            </p>
             <h1 className="landing__title">
               진실을 가리는 순간,
               <br />
               <span>HackTruth가 곧장 밝힙니다</span>
             </h1>
             <p className="landing__description">
-              영상, 이미지, 텍스트까지 브라우저 안에서 클릭 한 번으로 검증하세요. HackTruth는 감지부터 공유까지
-              전 과정을 자동화해 사실에 근거한 커뮤니케이션을 돕습니다.
+              영상, 이미지, 텍스트까지 브라우저 안에서 클릭 한 번으로
+              검증하세요. HackTruth는 감지부터 공유까지 전 과정을 자동화해
+              사실에 근거한 커뮤니케이션을 돕습니다.
             </p>
             <ul className="landing__hero-highlights">
               <li>
-                <span aria-hidden="true">⚡</span> 3분 이내 완료되는 신속한 Fact Check
+                <span aria-hidden="true">⚡</span> 3분 이내 완료되는 신속한 Fact
+                Check
               </li>
               <li>
-                <span aria-hidden="true">🛡️</span> 오버레이 경고로 실시간 허위 정보 감지
+                <span aria-hidden="true">🛡️</span> 오버레이 경고로 실시간 허위
+                정보 감지
               </li>
               <li>
-                <span aria-hidden="true">🔗</span> 근거가 담긴 공유 링크 자동 생성
+                <span aria-hidden="true">🔗</span> 근거가 담긴 공유 링크 자동
+                생성
               </li>
             </ul>
             <div className="landing__cta-group">
-              <a href="#install-guide" className="landing__cta landing__cta--primary">
+              <a
+                href="#install-guide"
+                className="landing__cta landing__cta--primary"
+              >
                 익스텐션 설치하기
               </a>
-              <a href="#hacktruth-flow" className="landing__cta landing__cta--ghost">
+              <a
+                href="#hacktruth-flow"
+                className="landing__cta landing__cta--ghost"
+              >
                 HackTruth 동작 보기
               </a>
             </div>
@@ -64,7 +78,7 @@ const LandingPage = () => {
               <span className="hero-card__badge">진행 중</span>
               <p>유튜브 영상 Fact Check 처리 중...</p>
               <div className="hero-card__progress">
-                <span style={{ width: '68%' }} />
+                <span style={{ width: "68%" }} />
               </div>
             </div>
 
@@ -94,14 +108,15 @@ const LandingPage = () => {
       <section
         ref={featureRef}
         className={`landing__section landing__section--feature reveal-section ${
-          featureVisible ? 'reveal-section--visible' : ''
+          featureVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__section-header">
           <h2>팩트체크 워크플로를 위한 핵심 경험</h2>
           <p>
-            HackTruth는 단순히 결과를 보여주는 것을 넘어, Fact Check가 진행되는 순간의 맥락과 이유를 모두
-            안내합니다. 각 구성요소가 하나의 경험으로 연결됩니다.
+            HackTruth는 단순히 결과를 보여주는 것을 넘어, Fact Check가 진행되는
+            순간의 맥락과 이유를 모두 안내합니다. 각 구성요소가 하나의 경험으로
+            연결됩니다.
           </p>
         </div>
         <div className="landing__feature-grid">
@@ -111,8 +126,8 @@ const LandingPage = () => {
             </div>
             <h3>결과 모달</h3>
             <p>
-              사실 여부, 판단 근거, 참조 링크를 하나의 뷰에 압축했습니다. 누구나 이해하기 쉽도록 구조화된 카드와
-              시각적 배지로 결론을 강조합니다.
+              사실 여부, 판단 근거, 참조 링크를 하나의 뷰에 압축했습니다. 누구나
+              이해하기 쉽도록 구조화된 카드와 시각적 배지로 결론을 강조합니다.
             </p>
           </article>
           <article className="landing__feature-card">
@@ -121,8 +136,9 @@ const LandingPage = () => {
             </div>
             <h3>실시간 오버레이</h3>
             <p>
-              우측 하단 오버레이가 누구보다 먼저 경고합니다. 백그라운드 감지 중 감지된 허위 정보는 즉시 안내하고,
-              진행률과 상태를 동시에 표시합니다.
+              우측 하단 오버레이가 누구보다 먼저 경고합니다. 백그라운드 감지 중
+              감지된 허위 정보는 즉시 안내하고, 진행률과 상태를 동시에
+              표시합니다.
             </p>
           </article>
           <article className="landing__feature-card">
@@ -131,8 +147,9 @@ const LandingPage = () => {
             </div>
             <h3>로딩 피드백</h3>
             <p>
-              작은 로딩 애니메이션으로 사용자는 언제든 HackTruth가 일하고 있다는 사실을 알 수 있습니다. 처리
-              단계와 남은 흐름을 직관적으로 이해시킵니다.
+              작은 로딩 애니메이션으로 사용자는 언제든 HackTruth가 일하고 있다는
+              사실을 알 수 있습니다. 처리 단계와 남은 흐름을 직관적으로
+              이해시킵니다.
             </p>
           </article>
           <article className="landing__feature-card">
@@ -141,8 +158,9 @@ const LandingPage = () => {
             </div>
             <h3>공유 링크</h3>
             <p>
-              클릭 한 번으로 결과와 근거가 담긴 링크가 발급됩니다. 조사 맥락을 그대로 전파하며, 협업과 인용에
-              필요한 정보를 손쉽게 전달할 수 있습니다.
+              클릭 한 번으로 결과와 근거가 담긴 링크가 발급됩니다. 조사 맥락을
+              그대로 전파하며, 협업과 인용에 필요한 정보를 손쉽게 전달할 수
+              있습니다.
             </p>
           </article>
         </div>
@@ -152,14 +170,15 @@ const LandingPage = () => {
         id="hacktruth-flow"
         ref={experienceRef}
         className={`landing__section landing__section--muted landing__section--split reveal-section ${
-          experienceVisible ? 'reveal-section--visible' : ''
+          experienceVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__section-header">
           <h2>매체별 사용자 플로우</h2>
           <p>
-            HackTruth는 영상, 이미지, 텍스트 등 서로 다른 콘텐츠 유형에 맞춰 자연스럽게 동작합니다. 전 과정은
-            오버레이와 모달로 연결되어 사용자가 길을 잃지 않도록 돕습니다.
+            HackTruth는 영상, 이미지, 텍스트 등 서로 다른 콘텐츠 유형에 맞춰
+            자연스럽게 동작합니다. 전 과정은 오버레이와 모달로 연결되어 사용자가
+            길을 잃지 않도록 돕습니다.
           </p>
         </div>
         <div className="landing__flow-grid">
@@ -169,7 +188,9 @@ const LandingPage = () => {
             <ul>
               <li>유튜브/인스타그램 영상 우측 하단에 Fact Check 버튼 노출</li>
               <li>버튼 클릭 시 오버레이가 요청 처리 중임을 안내</li>
-              <li>검증 완료 후 모달에서 AI 포함 여부, 허위 정보, 레퍼런스 제공</li>
+              <li>
+                검증 완료 후 모달에서 AI 포함 여부, 허위 정보, 레퍼런스 제공
+              </li>
             </ul>
           </article>
 
@@ -189,7 +210,9 @@ const LandingPage = () => {
             <ul>
               <li>텍스트 선택 후 팩트체크 옵션 클릭</li>
               <li>우측 하단 오버레이로 진행 상태 안내</li>
-              <li>결과 모달에서 사실 확률과 설명 제공, 공유하기로 웹페이지 연결</li>
+              <li>
+                결과 모달에서 사실 확률과 설명 제공, 공유하기로 웹페이지 연결
+              </li>
             </ul>
           </article>
 
@@ -208,40 +231,54 @@ const LandingPage = () => {
       <section
         ref={flowRef}
         className={`landing__section landing__section--process reveal-section ${
-          flowVisible ? 'reveal-section--visible' : ''
+          flowVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__section-header">
           <h2>Fact Check는 이렇게 완성됩니다</h2>
-          <p>HackTruth는 요청 순간부터 결과 공유까지 단계별로 시각적 피드백을 제공해 혼란을 줄여줍니다.</p>
+          <p>
+            HackTruth는 요청 순간부터 결과 공유까지 단계별로 시각적 피드백을
+            제공해 혼란을 줄여줍니다.
+          </p>
         </div>
         <ol className="landing__process">
           <li>
             <span className="landing__process-step">01</span>
             <div>
               <h3>콘텐츠 선택 & 요청</h3>
-              <p>영상 버튼, 이미지 우클릭, 텍스트 드래그 등 상황에 맞는 시작점을 제공합니다.</p>
+              <p>
+                영상 버튼, 이미지 우클릭, 텍스트 드래그 등 상황에 맞는 시작점을
+                제공합니다.
+              </p>
             </div>
           </li>
           <li>
             <span className="landing__process-step">02</span>
             <div>
               <h3>분석 & 감지</h3>
-              <p>오버레이와 로딩 애니메이션으로 분석 상태를 투명하게 공유합니다.</p>
+              <p>
+                오버레이와 로딩 애니메이션으로 분석 상태를 투명하게 공유합니다.
+              </p>
             </div>
           </li>
           <li>
             <span className="landing__process-step">03</span>
             <div>
               <h3>결과 요약</h3>
-              <p>모달에서 Fact Check 결과, 허위 여부, 근거, 참고 링크를 요약해 전달합니다.</p>
+              <p>
+                모달에서 Fact Check 결과, 허위 여부, 근거, 참고 링크를 요약해
+                전달합니다.
+              </p>
             </div>
           </li>
           <li>
             <span className="landing__process-step">04</span>
             <div>
               <h3>공유 & 기록</h3>
-              <p>공유하기 버튼으로 HackTruth 웹 페이지에 기록하고, 협업 공간에 근거를 남길 수 있습니다.</p>
+              <p>
+                공유하기 버튼으로 HackTruth 웹 페이지에 기록하고, 협업 공간에
+                근거를 남길 수 있습니다.
+              </p>
             </div>
           </li>
         </ol>
@@ -250,14 +287,15 @@ const LandingPage = () => {
       <section
         ref={shareRef}
         className={`landing__section landing__section--share reveal-section ${
-          shareVisible ? 'reveal-section--visible' : ''
+          shareVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__section-header">
           <h2>팩트체크 결과를 더 널리</h2>
           <p>
-            HackTruth 공유 링크는 신뢰할 수 있는 근거와 함께 커뮤니티, 팀, 고객에게 전달할 수 있습니다. 확장
-            프로그램을 설치하면 검증, 기록, 공유까지 한 번에 연결됩니다.
+            HackTruth 공유 링크는 신뢰할 수 있는 근거와 함께 커뮤니티, 팀,
+            고객에게 전달할 수 있습니다. 확장 프로그램을 설치하면 검증, 기록,
+            공유까지 한 번에 연결됩니다.
           </p>
         </div>
         <div className="landing__share-callout">
@@ -275,8 +313,13 @@ const LandingPage = () => {
               <span>쿼리 파라미터로 결과를 정확히 추적</span>
             </div>
           </div>
-          <p>아직 설치하지 않았다면 아래 버튼을 눌러 설치 가이드를 따라주세요.</p>
-          <a href="#install-guide" className="landing__cta landing__cta--primary">
+          <p>
+            아직 설치하지 않았다면 아래 버튼을 눌러 설치 가이드를 따라주세요.
+          </p>
+          <a
+            href="#install-guide"
+            className="landing__cta landing__cta--primary"
+          >
             익스텐션 설치하기
           </a>
         </div>
@@ -286,27 +329,33 @@ const LandingPage = () => {
         id="install-guide"
         ref={installRef}
         className={`landing__section landing__section--install reveal-section ${
-          installVisible ? 'reveal-section--visible' : ''
+          installVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__section-header">
           <h2>🚀 설치 방법</h2>
           <p>
-            HackTruth는 아직 Chrome 웹 스토어 심사 중입니다. 아래 안내를 따라 로컬에서 확장 프로그램을 불러오고
-            바로 사용해보세요.
+            HackTruth는 아직 Chrome 웹 스토어 심사 중입니다. 아래 안내를 따라
+            로컬에서 확장 프로그램을 불러오고 바로 사용해보세요.
           </p>
         </div>
 
         <ol className="landing__install-steps">
           <li>
             <h3>Chrome 브라우저에서 개발자 모드 열기</h3>
-            <p>주소창에 <code>chrome://extensions/</code> 를 입력하거나 메뉴 &gt; 도구 더보기 &gt; 확장 프로그램으로 이동합니다.</p>
+            <p>
+              주소창에 <code>chrome://extensions/</code> 를 입력하거나 메뉴 &gt;
+              도구 더보기 &gt; 확장 프로그램으로 이동합니다.
+            </p>
           </li>
           <li>
             <h3>개발자 모드 활성화</h3>
-            <p>확장 프로그램 페이지 우측 상단에서 &ldquo;개발자 모드&rdquo; 토글을 켭니다.</p>
+            <p>
+              확장 프로그램 페이지 우측 상단에서 &ldquo;개발자 모드&rdquo;
+              토글을 켭니다.
+            </p>
             <img
-              src="https://developer.chrome.com/static/docs/extensions/mv3/getstarted/development-basics/image/extensions-page-e0d64d89a6acf_1920.png"
+              src="/public/extension-developer-mode.png"
               alt="Chrome 확장 프로그램 개발자 모드 화면"
             />
           </li>
@@ -327,15 +376,25 @@ const LandingPage = () => {
           <li>
             <h3>압축 해제한 확장 프로그램 로드</h3>
             <p>
-              &ldquo;압축해제된 확장 프로그램을 로드합니다&rdquo; 버튼을 눌러 압축 해제한 <code>HackTruth/extension</code>{' '}
-              폴더를 선택합니다.
+              &ldquo;압축해제된 확장 프로그램을 로드합니다&rdquo; 버튼을 눌러
+              압축 해제한 <code>HackTruth/extension</code> 폴더를 선택합니다.
             </p>
           </li>
           <li>
             <h3>설치 확인 및 고정</h3>
             <p>
-              확장 프로그램 목록에 &ldquo;Fact Check&rdquo;가 보이면 설치가 완료되었습니다. 필요하다면 퍼즐 아이콘에서
-              핀을 눌러 툴바에 고정하세요.
+              확장 프로그램 목록에 &ldquo;Fact Check&rdquo;가 보이면 설치가
+              완료되었습니다. 필요하다면 퍼즐 아이콘에서 핀을 눌러 툴바에
+              고정하세요.
+            </p>
+          </li>
+          <li>
+            <h3>API Base URL 입력</h3>
+            <p>
+              확장 프로그램 아이콘을 클릭해 설정 화면을 열고 &ldquo;API Base
+              URL&rdquo; 항목에 팩트 체크
+              API 서버 주소를 입력한 뒤 저장하세요. 입력하지 않으면 팩트 체크
+              요청이 진행되지 않습니다.
             </p>
           </li>
         </ol>
@@ -382,20 +441,26 @@ const LandingPage = () => {
       <section
         ref={ctaRef}
         className={`landing__section landing__section--cta reveal-section ${
-          ctaVisible ? 'reveal-section--visible' : ''
+          ctaVisible ? "reveal-section--visible" : ""
         }`}
       >
         <div className="landing__cta-panel">
           <h2>HackTruth와 함께 진실을 더 빠르게</h2>
           <p>
-            팩트체크는 복잡할 필요가 없습니다. 브라우저에 HackTruth를 설치하고, 필요한 순간 버튼을 눌러주세요.
-            나머지는 우리가 책임집니다.
+            팩트체크는 복잡할 필요가 없습니다. 브라우저에 HackTruth를 설치하고,
+            필요한 순간 버튼을 눌러주세요. 나머지는 우리가 책임집니다.
           </p>
           <div className="landing__cta-group">
-            <a href="#install-guide" className="landing__cta landing__cta--primary">
+            <a
+              href="#install-guide"
+              className="landing__cta landing__cta--primary"
+            >
               익스텐션 설치하기
             </a>
-            <a href="#hacktruth-flow" className="landing__cta landing__cta--ghost">
+            <a
+              href="#hacktruth-flow"
+              className="landing__cta landing__cta--ghost"
+            >
               기능 다시 보기
             </a>
           </div>
