@@ -554,6 +554,23 @@ const showVideoResultModal = (data) => {
 
   const platformName = data?.platform === "youtube" ? "YouTube" : "Video";
 
+  const formatMultiline = (text) => {
+    return escapeHtml(text).replace(/\n/g, "<br>");
+  };
+
+  const formatDuration = (seconds) => {
+    if (typeof seconds !== "number" || !Number.isFinite(seconds)) {
+      return null;
+    }
+    const totalSeconds = Math.max(0, Math.round(seconds));
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    if (minutes > 0) {
+      return `${minutes}분 ${secs}초`;
+    }
+    return `${totalSeconds}초`;
+  };
+
   const summaryText = data?.result
     ? escapeHtml(data.result)
     : "영상 분석 결과를 불러오지 못했습니다.";
@@ -566,6 +583,28 @@ const showVideoResultModal = (data) => {
 
   const detailContent = detailRaw ? escapeHtml(detailRaw) : null;
 
+  const factCheckData =
+    (data?.factCheck && typeof data.factCheck === "object"
+      ? data.factCheck
+      : null) ||
+    (data?.rawResponse?.fact_check &&
+    typeof data.rawResponse.fact_check === "object"
+      ? data.rawResponse.fact_check
+      : null);
+
+  const accuracyValue =
+    typeof factCheckData?.accuracy === "string"
+      ? factCheckData.accuracy
+      : "";
+  const accuracyReasonValue =
+    typeof factCheckData?.accuracy_reason === "string"
+      ? factCheckData.accuracy_reason
+      : "";
+  const factCheckReasonValue =
+    typeof factCheckData?.reason === "string"
+      ? factCheckData.reason
+      : "";
+
   const misinformationRaw =
     data?.rawResponse?.misinformation_result ||
     data?.rawResponse?.misinformation ||
@@ -575,19 +614,7 @@ const showVideoResultModal = (data) => {
 
   const misinformationText = misinformationRaw
     ? escapeHtml(misinformationRaw)
-    : "사실 검증 결과는 준비중입니다.";
-
-  const referencesRaw =
-    data?.rawResponse?.references ||
-    data?.rawResponse?.reference_urls ||
-    data?.rawResponse?.urls ||
-    [];
-
-  const references = Array.isArray(referencesRaw)
-    ? referencesRaw
-    : typeof referencesRaw === "string" && referencesRaw.length > 0
-    ? [referencesRaw]
-    : [];
+    : "";
 
   const requestedUrl =
     typeof data?.requestedUrl === "string" && data.requestedUrl.length > 0
@@ -611,15 +638,154 @@ const showVideoResultModal = (data) => {
     </div>
   `;
 
+  const metadataItems = [];
+  const formattedDuration = formatDuration(data?.duration);
+  if (formattedDuration) {
+    metadataItems.push({
+      label: "영상 길이",
+      value: formattedDuration,
+    });
+  }
+  if (typeof data?.cached === "boolean") {
+    metadataItems.push({
+      label: "캐시 여부",
+      value: data.cached ? "예" : "아니오",
+    });
+  }
+  if (typeof data?.videoId === "string" && data.videoId.trim().length > 0) {
+    metadataItems.push({
+      label: "Video ID",
+      value: data.videoId.trim(),
+    });
+  }
+  if (typeof data?.recordId === "string" && data.recordId.trim().length > 0) {
+    metadataItems.push({
+      label: "Record ID",
+      value: data.recordId.trim(),
+    });
+  }
+
+  const metadataHtml =
+    metadataItems.length > 0
+      ? `
+    <div class="video-metadata-grid">
+      ${metadataItems
+        .map((item) => {
+          return `
+        <div class="video-metadata-card">
+          <span class="metadata-label">${escapeHtml(item.label)}</span>
+          <span class="metadata-value">${escapeHtml(item.value)}</span>
+        </div>
+      `;
+        })
+        .join("")}
+    </div>
+  `
+      : "";
+
+  let factCheckContent = "";
+  if (accuracyValue || factCheckReasonValue || accuracyReasonValue) {
+    const accuracyHtml = accuracyValue
+      ? `
+        <div class="video-fact-check-grid">
+          <div class="video-fact-check-card">
+            <span class="fact-check-label">정확도</span>
+            <span class="fact-check-value">${escapeHtml(
+              accuracyValue
+            )}</span>
+          </div>
+        </div>
+      `
+      : "";
+    const reasonHtml = factCheckReasonValue
+      ? `<p class="video-fact-check-reason">${formatMultiline(
+          factCheckReasonValue
+        )}</p>`
+      : "";
+    const accuracyReasonHtml = accuracyReasonValue
+      ? `<p class="video-fact-check-accuracy-reason">${formatMultiline(
+          accuracyReasonValue
+        )}</p>`
+      : "";
+
+    factCheckContent = `
+      ${accuracyHtml}
+      ${reasonHtml}
+      ${accuracyReasonHtml}
+    `;
+  } else if (misinformationText) {
+    factCheckContent = `<p class="video-result-misinformation">${misinformationText}</p>`;
+  } else {
+    factCheckContent = `<p class="video-result-placeholder">사실 검증 결과는 준비중입니다.</p>`;
+  }
+
+  const transcriptTextRaw =
+    typeof data?.transcript === "string" ? data.transcript.trim() : "";
+  const transcriptSrtRaw =
+    typeof data?.transcriptSrt === "string" ? data.transcriptSrt.trim() : "";
+
+  const transcriptBlocks = [];
+  if (transcriptTextRaw) {
+    transcriptBlocks.push(`
+      <div class="video-transcript-text">${formatMultiline(
+        transcriptTextRaw
+      )}</div>
+    `);
+  }
+  if (transcriptSrtRaw) {
+    transcriptBlocks.push(`
+      <details class="video-transcript-srt">
+        <summary>SRT 자막 보기</summary>
+        <pre class="video-transcript-srt-block">${escapeHtml(
+          transcriptSrtRaw
+        )}</pre>
+      </details>
+    `);
+  }
+
+  const factCheckUrls = Array.isArray(factCheckData?.urls)
+    ? factCheckData.urls
+    : [];
+
+  const legacyReferencesRaw =
+    data?.rawResponse?.references ||
+    data?.rawResponse?.reference_urls ||
+    data?.rawResponse?.urls ||
+    [];
+
+  const referenceCandidates = [
+    ...factCheckUrls,
+    ...(Array.isArray(legacyReferencesRaw)
+      ? legacyReferencesRaw
+      : typeof legacyReferencesRaw === "string"
+      ? [legacyReferencesRaw]
+      : []),
+  ];
+
+  const references = [];
+  const referenceSet = new Set();
+
+  referenceCandidates.forEach((ref) => {
+    if (typeof ref !== "string") {
+      return;
+    }
+    const trimmed = ref.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (referenceSet.has(trimmed)) {
+      return;
+    }
+    referenceSet.add(trimmed);
+    references.push(trimmed);
+  });
+
   const referencesHtml =
     references.length > 0
       ? `
           <ul class="reference-list">
             ${references
               .map((ref) => {
-                if (typeof ref !== "string") {
-                  return "";
-                }
                 const safeRef = escapeHtml(ref);
                 return `<li><a href="${safeRef}" target="_blank" rel="noopener noreferrer">${safeRef}</a></li>`;
               })
@@ -627,6 +793,55 @@ const showVideoResultModal = (data) => {
           </ul>
         `
       : `<p class="video-result-placeholder">참고 레퍼런스는 준비중입니다.</p>`;
+
+  let detailSectionContent = "";
+  if (detailContent) {
+    detailSectionContent += `<p class="video-detail-text">${detailContent}</p>`;
+  }
+  detailSectionContent += referencesHtml;
+
+  const sections = [
+    {
+      title: "생성형 AI 요소 여부",
+      content: `
+        <p class="video-result-summary">${summaryText}</p>
+        ${scoreGridHtml}
+        ${metadataHtml}
+      `,
+    },
+    {
+      title: "사실 검증",
+      content: factCheckContent,
+    },
+  ];
+
+  if (transcriptBlocks.length > 0) {
+    sections.push({
+      title: "영상 대본",
+      content: transcriptBlocks.join(""),
+    });
+  }
+
+  sections.push({
+    title: "상세 설명 & 레퍼런스",
+    content:
+      detailSectionContent ||
+      `<p class="video-result-placeholder">상세 설명은 준비중입니다.</p>`,
+  });
+
+  const sectionsHtml = sections
+    .map((section, index) => {
+      return `
+        <div class="video-result-item">
+          <div class="video-result-badge">${index + 1}</div>
+          <div class="video-result-item-body">
+            <h3>${section.title}</h3>
+            ${section.content}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
 
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
@@ -649,35 +864,7 @@ const showVideoResultModal = (data) => {
             : ""
         }
 
-        <div class="video-result-item">
-          <div class="video-result-badge">1</div>
-          <div class="video-result-item-body">
-            <h3>생성형 AI 요소 여부</h3>
-            <p class="video-result-summary">${summaryText}</p>
-            ${scoreGridHtml}
-          </div>
-        </div>
-
-        <div class="video-result-item">
-          <div class="video-result-badge">2</div>
-          <div class="video-result-item-body">
-            <h3>사실 검증</h3>
-            <p class="video-result-misinformation">${misinformationText}</p>
-          </div>
-        </div>
-
-        <div class="video-result-item">
-          <div class="video-result-badge">3</div>
-          <div class="video-result-item-body">
-            <h3>상세 설명 & 레퍼런스</h3>
-            ${
-              detailContent
-                ? `<p class="video-detail-text">${detailContent}</p>`
-                : `<p class="video-result-placeholder">상세 설명은 준비중입니다.</p>`
-            }
-            ${referencesHtml}
-          </div>
-        </div>
+        ${sectionsHtml}
       </div>
     </div>
   `;

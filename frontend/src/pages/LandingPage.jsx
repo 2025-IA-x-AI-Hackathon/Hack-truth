@@ -53,6 +53,14 @@ const LandingPage = () => {
               >
                 HackTruth 동작 보기
               </a>
+              <a
+                href="https://github.com/2025-IA-x-AI-Hackathon/Hack-truth"
+                className="landing__cta landing__cta--ghost"
+                target="_blank"
+                rel="noreferrer"
+              >
+                github repo 보기
+              </a>
             </div>
           </div>
 
@@ -94,7 +102,7 @@ const LandingPage = () => {
 
         <div className="landing__hero-stats">
           <div className="landing__stat-card">
-            <strong>90%+</strong>
+            <strong>99%+</strong>
             <span>텍스트/이미지 팩트 체크 성공률</span>
           </div>
           <div className="landing__stat-card">
@@ -292,6 +300,7 @@ const LandingPage = () => {
               완료되었습니다. 필요하다면 퍼즐 아이콘에서 핀을 눌러 툴바에
               고정하세요.
             </p>
+            <p>페이지를 새로고침하고 팩트체크를 즐겨보세요.</p>
           </li>
         </ol>
       </section>

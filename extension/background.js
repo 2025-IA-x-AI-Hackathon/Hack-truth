@@ -514,6 +514,26 @@ const fetchVideoFactCheckAPI = async (contentUrl) => {
       console.error("Status Text:", response.statusText);
       console.error("Error Body:", errorText);
       console.error("================================================");
+
+      if (response.status === 422) {
+        const contentForbiddenError = new Error(
+          "금지된 컨텐츠라 요청을 수행할 수 없습니다."
+        );
+        contentForbiddenError.code = "VIDEO_CONTENT_FORBIDDEN";
+        contentForbiddenError.status = response.status;
+        contentForbiddenError.responseBody = errorText;
+        throw contentForbiddenError;
+      }
+
+      if (response.status === 403) {
+        const forbiddenError = new Error(
+          "영상 다운로드 과정중 문제가 발생했습니다. 잠시후 다시 시도해주세요."
+        );
+        forbiddenError.code = "VIDEO_DOWNLOAD_FORBIDDEN";
+        forbiddenError.status = response.status;
+        forbiddenError.responseBody = errorText;
+        throw forbiddenError;
+      }
       throw new Error(
         `비디오 팩트 체크 API 요청 실패 (${response.status}): ${response.statusText}`
       );
@@ -658,6 +678,31 @@ const handleVideoFactCheck = async (contentUrl, platform, tabId) => {
       fftArtifactScore: response.fft_artifact_score ?? "",
       actionPatternScore: response.action_pattern_score ?? "",
       result: response.result ?? "",
+      transcript:
+        typeof response.transcript === "string" ? response.transcript : null,
+      transcriptSrt:
+        typeof response.transcript_srt === "string"
+          ? response.transcript_srt
+          : null,
+      factCheck:
+        response.fact_check && typeof response.fact_check === "object"
+          ? response.fact_check
+          : null,
+      cached:
+        typeof response.cached === "boolean" ? response.cached : null,
+      recordId:
+        typeof response.record_id === "string" && response.record_id.length > 0
+          ? response.record_id
+          : null,
+      videoId:
+        typeof response.video_id === "string" && response.video_id.length > 0
+          ? response.video_id
+          : null,
+      duration:
+        typeof response.duration === "number" &&
+        Number.isFinite(response.duration)
+          ? response.duration
+          : null,
       rawResponse: response,
     };
 
@@ -670,13 +715,37 @@ const handleVideoFactCheck = async (contentUrl, platform, tabId) => {
   } catch (error) {
     console.error("Video fact check failed:", error);
 
-    const isApiUrlError =
-      error.message.includes("API URL") ||
-      error.message.includes("API 서버에 연결할 수 없습니다") ||
-      error.message.includes("Failed to fetch") ||
-      error.message.includes("NetworkError");
+    const errorMessage =
+      typeof error?.message === "string" ? error.message : "";
 
-    if (isApiUrlError) {
+    const isContentForbidden =
+      error?.code === "VIDEO_CONTENT_FORBIDDEN" || error?.status === 422;
+
+    const isForbidden =
+      error?.code === "VIDEO_DOWNLOAD_FORBIDDEN" || error?.status === 403;
+
+    const isApiUrlError =
+      errorMessage.includes("API URL") ||
+      errorMessage.includes("API 서버에 연결할 수 없습니다") ||
+      errorMessage.includes("Failed to fetch") ||
+      errorMessage.includes("NetworkError");
+
+    if (isContentForbidden) {
+      sendMessageToTab(tabId, {
+        type: "SHOW_ERROR",
+        data: {
+          message: "금지된 컨텐츠라 요청을 수행할 수 없습니다.",
+        },
+      });
+    } else if (isForbidden) {
+      sendMessageToTab(tabId, {
+        type: "SHOW_ERROR",
+        data: {
+          message:
+            "영상 다운로드 과정중 문제가 발생했습니다. 잠시후 다시 시도해주세요.",
+        },
+      });
+    } else if (isApiUrlError) {
       sendMessageToTab(tabId, {
         type: "SHOW_API_URL_WARNING",
         data: {
