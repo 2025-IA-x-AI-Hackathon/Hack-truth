@@ -104,6 +104,7 @@ const showUrlOverlay = (url, platform) => {
   overlay.className = "fact-check-url-overlay";
 
   const platformName = platform === "youtube" ? "YouTube" : "Instagram";
+  const safeUrl = escapeHtml(url);
 
   overlay.innerHTML = `
     <div class="url-overlay-content">
@@ -114,9 +115,15 @@ const showUrlOverlay = (url, platform) => {
       <div class="url-overlay-body">
         <div class="url-display">
           <strong>URL:</strong>
-          <p>${url}</p>
+          <p>${safeUrl}</p>
         </div>
-        <p class="url-overlay-note">이 콘텐츠의 팩트 체크를 진행합니다.</p>
+        <div class="url-overlay-status">
+          <div class="loading-spinner"></div>
+          <div class="url-overlay-status-text">
+            <p class="url-overlay-note">요청한 작업을 처리중입니다.</p>
+            <p class="url-overlay-subnote">팩트 체크 분석을 준비하고 있습니다.</p>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -335,9 +342,7 @@ const showResultModal = (data) => {
     : "";
 
   const shareButtonState = shareUrl ? "" : "disabled";
-  const shareButtonLabel = shareUrl
-    ? "결과 공유하기"
-    : "공유 URL을 설정해주세요";
+  const shareButtonLabel = shareUrl ? "결과 공유하기" : "공유 URL 준비중";
 
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
@@ -373,7 +378,7 @@ const showResultModal = (data) => {
         <p class="share-result-hint">${
           shareUrl
             ? "버튼을 누르면 공유 URL이 클립보드에 복사됩니다."
-            : "팝업에서 Share Base URL을 설정해주세요."
+            : "결과 ID를 아직 받지 못해 공유 링크를 만들 수 없습니다."
         }</p>
         <p class="share-result-status" aria-live="polite"></p>
       </div>
@@ -559,11 +564,24 @@ const showVideoResultModal = (data) => {
     ? escapeHtml(data.result)
     : "영상 분석 결과를 불러오지 못했습니다.";
 
-  const detailText =
+  const detailRaw =
     data?.rawResponse?.detail ||
     data?.rawResponse?.description ||
     data?.rawResponse?.summary ||
     "";
+
+  const detailContent = detailRaw ? escapeHtml(detailRaw) : null;
+
+  const misinformationRaw =
+    data?.rawResponse?.misinformation_result ||
+    data?.rawResponse?.misinformation ||
+    data?.misinformationResult ||
+    data?.misinformation ||
+    "";
+
+  const misinformationText = misinformationRaw
+    ? escapeHtml(misinformationRaw)
+    : "사실 검증 결과는 준비중입니다.";
 
   const referencesRaw =
     data?.rawResponse?.references ||
@@ -577,6 +595,45 @@ const showVideoResultModal = (data) => {
       ? [referencesRaw]
       : [];
 
+  const requestedUrl =
+    typeof data?.requestedUrl === "string" && data.requestedUrl.length > 0
+      ? escapeHtml(data.requestedUrl)
+      : "";
+
+  const scoreGridHtml = `
+    <div class="video-score-grid">
+      <div class="video-score-card">
+        <span class="score-label">FFT Artifact Score</span>
+        <span class="score-value">${escapeHtml(
+          data?.fftArtifactScore ?? "-"
+        )}</span>
+      </div>
+      <div class="video-score-card">
+        <span class="score-label">Action Pattern Score</span>
+        <span class="score-value">${escapeHtml(
+          data?.actionPatternScore ?? "-"
+        )}</span>
+      </div>
+    </div>
+  `;
+
+  const referencesHtml =
+    references.length > 0
+      ? `
+          <ul class="reference-list">
+            ${references
+              .map((ref) => {
+                if (typeof ref !== "string") {
+                  return "";
+                }
+                const safeRef = escapeHtml(ref);
+                return `<li><a href="${safeRef}" target="_blank" rel="noopener noreferrer">${safeRef}</a></li>`;
+              })
+              .join("")}
+          </ul>
+        `
+      : `<p class="video-result-placeholder">참고 레퍼런스는 준비중입니다.</p>`;
+
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
     <div class="modal-content">
@@ -585,57 +642,48 @@ const showVideoResultModal = (data) => {
         <button class="modal-close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
-        <div class="result-section">
-          <h3>결과 요약</h3>
-          <p class="video-result-summary">${summaryText}</p>
-        </div>
+        <p class="video-result-intro">Fact Check 결과는 다음과 같습니다.</p>
 
-        <div class="result-section">
-          <h3>신뢰 지표</h3>
-          <div class="video-score-grid">
-            <div class="video-score-card">
-              <span class="score-label">FFT Artifact Score</span>
-              <span class="score-value">${escapeHtml(
-                data?.fftArtifactScore ?? "-"
-              )}</span>
-            </div>
-            <div class="video-score-card">
-              <span class="score-label">Action Pattern Score</span>
-              <span class="score-value">${escapeHtml(
-                data?.actionPatternScore ?? "-"
-              )}</span>
-            </div>
+        ${
+          requestedUrl
+            ? `
+        <div class="video-url-pill">
+          <span class="video-url-label">분석한 영상</span>
+          <span class="video-url-value">${requestedUrl}</span>
+        </div>
+        `
+            : ""
+        }
+
+        <div class="video-result-item">
+          <div class="video-result-badge">1</div>
+          <div class="video-result-item-body">
+            <h3>생성형 AI 요소 여부</h3>
+            <p class="video-result-summary">${summaryText}</p>
+            ${scoreGridHtml}
           </div>
         </div>
 
-        ${
-          detailText
-            ? `
-        <div class="result-section">
-          <h3>상세 설명</h3>
-          <p class="video-detail-text">${escapeHtml(detailText)}</p>
+        <div class="video-result-item">
+          <div class="video-result-badge">2</div>
+          <div class="video-result-item-body">
+            <h3>사실 검증</h3>
+            <p class="video-result-misinformation">${misinformationText}</p>
+          </div>
         </div>
-        `
-            : ""
-        }
 
-        ${
-          references.length > 0
-            ? `
-        <div class="result-section">
-          <h3>참고 레퍼런스</h3>
-          <ul class="reference-list">
-            ${references
-              .map(
-                (ref) =>
-                  `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`
-              )
-              .join("")}
-          </ul>
+        <div class="video-result-item">
+          <div class="video-result-badge">3</div>
+          <div class="video-result-item-body">
+            <h3>상세 설명 & 레퍼런스</h3>
+            ${
+              detailContent
+                ? `<p class="video-detail-text">${detailContent}</p>`
+                : `<p class="video-result-placeholder">상세 설명은 준비중입니다.</p>`
+            }
+            ${referencesHtml}
+          </div>
         </div>
-        `
-            : ""
-        }
       </div>
     </div>
   `;
@@ -1067,12 +1115,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     showResultModal(request.data);
   } else if (request.type === "SHOW_ERROR") {
     hideLoadingOverlay();
+    removeUrlOverlay();
+    showPageButtonAgain();
     showErrorModal(request.data);
   } else if (request.type === "SHOW_WARNING_OVERLAY") {
     const { isCurrentPage, url } = request.data;
     showWarningOverlay(isCurrentPage, url);
   } else if (request.type === "SHOW_API_URL_WARNING") {
     hideLoadingOverlay();
+    removeUrlOverlay();
+    showPageButtonAgain();
     showApiUrlWarningOverlay(request.data.message);
   } else if (request.type === "SHOW_IMAGE_RESULT_MODAL") {
     hideLoadingOverlay();
