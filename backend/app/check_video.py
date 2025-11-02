@@ -34,11 +34,11 @@ def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"
 
     with YoutubeDL(ydl_opts) as ydl:
         # 1️⃣ 영상 정보 먼저 가져오기 (다운로드 안함)
-        info = ydl.extract_info(url, download=False)
-        duration = info.get("duration", 0)  # 초 단위
+        # info = ydl.extract_info(url, download=False)
+        # duration = info.get("duration", 0)  # 초 단위
 
-        if duration > 180:
-            raise ValueError(f"영상 길이 {duration:.1f}s 초과, 최대 180s까지 허용됩니다.")
+        # if duration > 180:
+        #     raise ValueError(f"영상 길이 {duration:.1f}s 초과, 최대 180s까지 허용됩니다.")
 
         # 2️⃣ 제한 통과하면 실제 다운로드
         info = ydl.extract_info(url, download=True)
