@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 from pytubefix import YouTube
 import math
-import yt_dlp
+from playwright.sync_api import sync_playwright
+import os
+from yt_dlp import YoutubeDL
 
 def safe_float(x):
     if x is None or math.isnan(x) or math.isinf(x):
@@ -10,25 +12,39 @@ def safe_float(x):
     return float(x)
 
 # -----------------------------
-# 1️⃣ 유튜브 영상 다운로드
+#  유튜브 영상 다운로드
 # -----------------------------
-def download_youtube_video(url, filename="video.mp4"):
+def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"):
+    filename = os.path.abspath(filename)
+
+    if os.path.exists(filename):
+        os.remove(filename)
+
     ydl_opts = {
-        'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
-        'outtmpl': filename,
-        'noplaylist': True,
-        'quiet': True,
-        'merge_output_format': 'mp4',  # 조각화 영상도 MP4로 병합
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                          'AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/118.0.0.0 Safari/537.36'
-        }
-        # 필요 시 'cookiefile': 'cookies.txt' 추가 가능
+        "format": 'b[ext=mp4]/b',      # 단일 mp4 파일
+        "outtmpl": filename,           # 저장 경로
+        "force_ipv4": True,            # IPv6 문제 회피
+        "noplaylist": True,            # 플레이리스트 방지
+        "quiet": False
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    return filename
+
+    if cookies_path:
+        ydl_opts["cookiefile"] = cookies_path
+
+
+    with YoutubeDL(ydl_opts) as ydl:
+        # 1️⃣ 영상 정보 먼저 가져오기 (다운로드 안함)
+        # info = ydl.extract_info(url, download=False)
+        # duration = info.get("duration", 0)  # 초 단위
+
+        # if duration > 180:
+        #     raise ValueError(f"영상 길이 {duration:.1f}s 초과, 최대 180s까지 허용됩니다.")
+
+        # 2️⃣ 제한 통과하면 실제 다운로드
+        info = ydl.extract_info(url, download=True)
+        saved_path = ydl.prepare_filename(info)
+
+    return saved_path
 
 # -----------------------------
 # 2️⃣ 프레임 샘플링
@@ -92,20 +108,17 @@ def analyze_motion(frames):
 # -----------------------------
 # 5️⃣ 최종 판정
 # -----------------------------
-def predict_ai_video(fft_score, motion_score,
-                     fft_threshold=0.6, motion_threshold=7.0):
-    fft_flag = fft_score < fft_threshold
-    motion_flag = motion_score < motion_threshold
+def predict_ai_video(fft_score, motion_score):
+        
+    # Motion 점수 기준으로 덮어쓰기
+    if motion_score <= 3.7:
+        result = "AI 생성 가능성 있음"
+    elif motion_score >= 6.1:
+        result = "실제 영상 가능성 있음"
 
-    # motion_score가 너무 낮으면 fft_flag와 상관없이 AI 생성 가능성 중간
-    if motion_score <= 4.59:
-        return "AI 생성 가능성 중간"
-
-    if fft_flag and motion_flag:
-        return "AI 생성 가능성 높음"
-    elif fft_flag:
-        return "AI 생성 가능성 중간"
-    elif motion_flag:
-        return "실제 영상 가능성 중간"
+    if fft_score <= 0.5 or fft_score >= 0.62:
+        result = "AI 생성 가능성 있음"
     else:
-        return "실제 영상 가능성 높음"
+        result = "실제 영상 가능성 있음"
+
+    return result
