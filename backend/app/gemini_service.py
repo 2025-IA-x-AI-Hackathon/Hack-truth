@@ -96,6 +96,14 @@ class GeminiVerificationError(RuntimeError):
     """Raised when the Gemini API response cannot be parsed."""
 
 
+class GeminiContentBlockedError(GeminiVerificationError):
+    """Raised when Gemini refuses to evaluate due to prohibited content."""
+
+    def __init__(self, block_reason: str) -> None:
+        self.block_reason = block_reason
+        super().__init__(f"Gemini blocked content: {block_reason}")
+
+
 def _discover_gemini_api_keys() -> list[str]:
     """Return the ordered list of Gemini API keys configured via environment variables."""
     keys: list[str] = []
@@ -239,6 +247,15 @@ class GeminiVerifier:
         except Exception as exc:  # noqa: BLE001 - expose raw error to caller with context
             logger.exception("Gemini API call failed")
             raise GeminiVerificationError(f"Gemini API call failed: {exc}") from exc
+
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        block_reason = getattr(prompt_feedback, "block_reason", None) if prompt_feedback else None
+        if block_reason:
+            normalized_reason = (
+                block_reason.name if hasattr(block_reason, "name") else str(block_reason)
+            )
+            logger.warning("Gemini blocked content for verification request: %s", normalized_reason)
+            raise GeminiContentBlockedError(normalized_reason)
 
         raw_text = getattr(response, "text", None)
         print("Gemini response text:", raw_text)
@@ -394,6 +411,15 @@ class GeminiImageVerifier:
         except Exception as exc:  # noqa: BLE001 - expose raw error to caller with context
             logger.exception("Gemini image API call failed")
             raise GeminiVerificationError(f"Gemini API call failed: {exc}") from exc
+
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        block_reason = getattr(prompt_feedback, "block_reason", None) if prompt_feedback else None
+        if block_reason:
+            normalized_reason = (
+                block_reason.name if hasattr(block_reason, "name") else str(block_reason)
+            )
+            logger.warning("Gemini blocked image verification request: %s", normalized_reason)
+            raise GeminiContentBlockedError(normalized_reason)
 
         raw_text = getattr(response, "text", None)
         logger.debug("Gemini image usage metadata: %s", getattr(response, "usage_metadata", None))
