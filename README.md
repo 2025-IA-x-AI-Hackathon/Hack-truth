@@ -7,6 +7,7 @@
 
 ## 목차
 - [주요 기능](#주요-기능)
+- [결과 통계](#결과-통계)
 - [구성 요소](#구성-요소)
 - [프로젝트 구조](#프로젝트-구조)
 - [빠른 시작](#빠른-시작)
@@ -25,7 +26,31 @@
 - Chrome 확장 프로그램(주요 클라이언트): 우클릭 메뉴와 오버레이 UI로 텍스트·이미지·영상 검증을 실행하고, 공유 링크를 바로 발급합니다.
 - React 공유 뷰어: `/share?id=<record_id>` 형태의 링크를 열어 검증 결과, 근거, 원문 텍스트를 확인할 수 있는 보조 웹 페이지입니다.
 
-## 결과 통계(TODO)
+## 결과 통계
+
+### 텍스트
+
+
+텍스트 데이터 진위 여부 판별(데이터 10건 비교(데이터 총 10건, 참7, 거짓3))
+- gemini 성공률 약 90%
+
+<div style="display: flex; gap: 16px; flex-wrap: wrap;">
+   <img width="300" height="200" alt="Image" src="https://github.com/user-attachments/assets/0f0b426c-4661-40d9-be44-9ce16f699b73" />
+
+   <img width="300" height="200" alt="Image" src="https://github.com/user-attachments/assets/14667769-01de-4f6d-8034-f2334dbe355e" />
+</div>
+
+
+### 이미지
+
+AI 생성 이미지 판별. gemini vs Huggingface deepfakedetect 모델 성능 비교(데이터 49건 비교(참28, 거짓21))
+- gemini 성공률 약 90%, Huggingface deepfackedetect 성공률 약 60%
+
+<div style="display: flex; gap: 16px; flex-wrap: wrap;">
+  <img width="300" height="200" alt="Image" src="https://github.com/user-attachments/assets/b915abba-8271-45b5-a653-949a753cb337" />
+  <img width="300" height="200" alt="Image" src="https://github.com/user-attachments/assets/5c521d8a-7146-40db-a7a9-40ceb2689115" />
+</div>
+
 
 
 ## 구성 요소
@@ -44,12 +69,34 @@ Hack-truth/
 ├── commit_convetion.md     # 팀 커밋 규칙
 ```
 
+## 아키텍처 개요
+```
+[사용자 브라우저]
+    └─ Chrome Extension (content.js, background.js, popup.js)
+          │ ① 텍스트/이미지/영상 검증 요청
+          ▼
+[FastAPI Backend (backend/app)]
+    ├─ GeminiVerifier (gemini_service.py) ──► Google Gemini API
+    ├─ Video Analyzer (check_video.py) ─────► yt-dlp · OpenCV 로컬 처리
+    └─ PostgreSQL (verification_records)
+          ▲
+          │ ② 검증 결과 record_id 저장
+
+[공유 뷰어 (frontend/src)]
+    └─ `/share?id=<record_id>` 진입 시 백엔드에서 결과 조회
+          │ ③ 결과 렌더링 및 공유 링크 제공
+```
+- **Chrome 확장 프로그램**이 사용자의 컨텍스트 메뉴/오버레이 이벤트를 받아 FastAPI 엔드포인트(`/verify/text`, `/verify/image`, `/verify/video`)로 REST 요청을 전송합니다.
+- **FastAPI 백엔드**는 Gemini API 키를 라운드 로빈으로 사용해 텍스트/이미지 판별을 호출하고, Hugging Face 모델 및 OpenCV 기반 영상 분석을 수행한 뒤 PostgreSQL에 결과를 저장합니다.
+- **React 공유 뷰어**는 확장 프로그램이 발급한 공유 링크를 통해 `record_id`를 받아 백엔드에서 데이터를 조회하고 결과를 시각화합니다.
+- 외부 의존성은 Google Gemini API, Hugging Face 모델 저장소, YouTube 다운로드(yt-dlp)를 포함하며, 오류 발생 시 한국어 메시지로 안내하고 재시도 로직을 제공합니다.
+
 ## 빠른 시작
 1. **필수 도구 설치**
    - Python 3.10 이상 (가상환경 권장)
    - Node.js 18 이상 / npm
    - PostgreSQL 14 이상 (또는 호환 클라우드 인스턴스)
-   - (선택) Docker: `docker run --name hacktruth-postgres -e POSTGRES_PASSWORD=hacktruth -p 5432:5432 -d postgres:14`
+
 2. **저장소 클론 후 의존성 설치**
    ```bash
    # 백엔드
@@ -144,7 +191,7 @@ curl -X POST http://localhost:8000/verify/text \
 ```
 
 ## 개발 메모
-- 모델 의존성(특히 `torch`, `opencv`, `mediapipe`) 설치 시간과 디스크 용량을 고려하세요.
+- 모델 의존성(특히 `torch`, `opencv`) 설치 시간과 디스크 용량을 고려하세요.
 - 영상 판별은 `yt-dlp`로 파일을 내려받으므로 디렉터리 쓰기 권한이 필요합니다.
 - Gemini API 호출 실패 시 재시도하며, 여러 API 키를 라운드 로빈으로 사용합니다.
 - 프런트 공유 페이지는 브라우저 콘솔에서 응답 로그를 확인할 수 있도록 설계되어 트러블슈팅이 용이합니다.
