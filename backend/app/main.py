@@ -41,6 +41,7 @@ from .check_video import (
 )
 from .gemini_service import (
     GeminiConfigurationError,
+    GeminiContentBlockedError,
     GeminiImageVerifier,
     GeminiVerificationError,
     GeminiVerifier,
@@ -351,6 +352,17 @@ async def _run_fact_check(transcript_text: Optional[str]) -> Tuple[Optional[Veri
     for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
         try:
             return await run_in_threadpool(verifier.verify, transcript_text)
+        except GeminiContentBlockedError as exc:
+            logger.warning(
+                "Gemini blocked fact-check attempt %d/%d: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc.block_reason,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="요청하신 컨텐츠는 금지된 컨텐츠로 분류되어 분석할 수 없습니다.",
+            ) from exc
         except GeminiVerificationError as exc:
             last_error = exc
             logger.warning(
@@ -502,6 +514,17 @@ async def verify_text(
         except GeminiConfigurationError as exc:
             logger.exception("Gemini configuration error on attempt %d", attempt)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GeminiContentBlockedError as exc:
+            logger.warning(
+                "Gemini blocked verification request on attempt %d/%d: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc.block_reason,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="요청하신 컨텐츠는 금지된 컨텐츠로 분류되어 분석할 수 없습니다.",
+            ) from exc
         except GeminiVerificationError as exc:
             logger.warning(
                 "Gemini verification attempt %d/%d failed: %s",
@@ -707,6 +730,17 @@ async def verify_image_with_gemini(
         except GeminiConfigurationError as exc:
             logger.exception("Gemini image configuration error on attempt %d", attempt)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GeminiContentBlockedError as exc:
+            logger.warning(
+                "Gemini blocked image verification request on attempt %d/%d: %s",
+                attempt,
+                GEMINI_MAX_ATTEMPTS,
+                exc.block_reason,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="요청하신 컨텐츠는 금지된 컨텐츠로 분류되어 분석할 수 없습니다.",
+            ) from exc
         except GeminiVerificationError as exc:
             logger.warning(
                 "Gemini image verification attempt %d/%d failed: %s",
