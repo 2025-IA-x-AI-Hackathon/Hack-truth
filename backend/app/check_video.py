@@ -31,7 +31,16 @@ def download_youtube_video(url, filename="video.mp4", cookies_path="cookies.txt"
     if cookies_path:
         ydl_opts["cookiefile"] = cookies_path
 
+
     with YoutubeDL(ydl_opts) as ydl:
+        # 1️⃣ 영상 정보 먼저 가져오기 (다운로드 안함)
+        info = ydl.extract_info(url, download=False)
+        duration = info.get("duration", 0)  # 초 단위
+
+        if duration > 180:
+            raise ValueError(f"영상 길이 {duration:.1f}s 초과, 최대 180s까지 허용됩니다.")
+
+        # 2️⃣ 제한 통과하면 실제 다운로드
         info = ydl.extract_info(url, download=True)
         saved_path = ydl.prepare_filename(info)
 
@@ -44,17 +53,12 @@ def sample_frames(video_path, sample_rate=30):
     cap = cv2.VideoCapture(video_path)
     frames = []
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
     for i in range(0, total_frames, sample_rate):
         cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
         if ret:
-            # ① 그레이 변환
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            # ② 가우시안 블러로 노이즈 제거
-            frame = cv2.GaussianBlur(frame, (5, 5), 0)
-            frames.append(frame)
-    
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frames.append(gray)
     cap.release()
     return frames
 
