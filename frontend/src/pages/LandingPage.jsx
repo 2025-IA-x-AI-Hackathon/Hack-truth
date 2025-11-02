@@ -53,14 +53,6 @@ const LandingPage = () => {
               >
                 HackTruth 동작 보기
               </a>
-              <a
-                href="https://github.com/2025-IA-x-AI-Hackathon/Hack-truth"
-                className="landing__cta landing__cta--ghost"
-                target="_blank"
-                rel="noreferrer"
-              >
-                github repo 보기
-              </a>
             </div>
           </div>
 
