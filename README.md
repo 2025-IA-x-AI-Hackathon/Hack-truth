@@ -3,8 +3,6 @@
 사실과 거짓을 구별하기 어려워지는 세상에서 저희 팀(팀명 : 진실의 나의 빛)은 **진실을 구별할 수 있는 힘**이 되고자 해커톤 프로젝트를 기획했습니다.
 사실검증이 되지 않고 무분별하게 **(1) 커뮤니티 글, 댓글, 유투브 영상 및 쇼츠로 가짜뉴스가 퍼지는 것**, **(2) 더이상 현실과 구별이 어려워진 AI 생성형 이미지/영상**을 쉽고 정확하게 구분할 수 있는 세상을 바라며 프로젝트를 완성했습니다.
 
-**크롬 확장프로그램**으로 유저의 인터넷 접속과 함께 진실을 비춰주는 든든한 등불이 될 것입니다.
-
 ## 목차
 - [주요 기능](#주요-기능)
 - [구성 요소](#구성-요소)
@@ -63,7 +61,7 @@ Hack-truth/
    ```
 3. **환경 변수 준비**
    - 백엔드: Gemini API 키, Postgres 연결 정보 등 (아래 참조)
-   - 프런트엔드: `VITE_API_BASE_URL`, `VITE_SHARE_ENDPOINT`
+   - 프런트엔드: `VITE_API_BASE_URL`
    - 확장 프로그램: 팝업에서 API Base URL 설정
 4. **서비스 구동**
    ```bash
@@ -106,13 +104,12 @@ GEMINI_API_KEYS=your-key-1,your-key-2
 LOG_LEVEL=INFO
 ```
 
-## 프런트엔드 설정 (공유 뷰어)
+## 프런트엔드 설정 (공유 뷰어 및 소개 페이지)
 - 기술 스택: React 18, Vite 5, React Router 6.
 - 역할: `/share?id=<record_id>` 링크 진입 시 백엔드에서 공유 데이터를 불러와 정규화합니다. 확장 프로그램이 발급한 공유 링크를 열었을 때 사용자에게 결과를 보여주는 용도입니다.
 - `.env.local` 예시 (`frontend/.env.local`):
   ```env
   VITE_API_BASE_URL=http://localhost:8000
-  VITE_SHARE_ENDPOINT=/verify/text/:record_id
   ```
 - 개발 서버: `npm run dev` → 기본 포트 `5173`.
 - 빌드: `npm run build` → 정적 파일은 `dist/`에 생성됩니다.
@@ -124,8 +121,6 @@ LOG_LEVEL=INFO
   - 유튜브 등 영상 페이지용 오버레이 UI
   - 백그라운드 감지 및 경고 배너
   - API Base URL, 기능 토글을 저장하는 팝업 UI
-- 최초 설치 후 팝업에서 백엔드 API 기반 URL을 입력해야 합니다 (예: `http://localhost:8000`).
-- Fact Check 결과에 포함된 `record_id`는 `http://15.165.34.51/share?id=<record_id>` 형식의 공유 링크로 변환됩니다. (필요 시 `background.js`의 `SHARE_BASE_URL`을 수정하세요.)
 
 ## API 개요
 기본 URL: `http://<host>:8000`
