@@ -342,6 +342,20 @@ const LandingPage = () => {
 
         <ol className="landing__install-steps">
           <li>
+            <h3>프로젝트 다운로드</h3>
+            <p>
+              <a
+                className="landing__link"
+                href="https://github.com/2025-IA-x-AI-Hackathon/Hack-truth/archive/refs/heads/main.zip"
+                target="_blank"
+                rel="noreferrer"
+              >
+                HackTruth 다운로드
+              </a>
+              이 버튼을 눌러 ZIP 파일을 내려받고 압축을 풀어주세요.
+            </p>
+          </li>
+          <li>
             <h3>Chrome 브라우저에서 개발자 모드 열기</h3>
             <p>
               주소창에 <code>chrome://extensions/</code> 를 입력하거나 메뉴 &gt;
@@ -358,20 +372,6 @@ const LandingPage = () => {
               src="/public/extension-developer-mode.png"
               alt="Chrome 확장 프로그램 개발자 모드 화면"
             />
-          </li>
-          <li>
-            <h3>프로젝트 다운로드</h3>
-            <p>
-              <a
-                className="landing__link"
-                href="https://github.com/2025-IA-x-AI-Hackathon/Hack-truth/archive/refs/heads/main.zip"
-                target="_blank"
-                rel="noreferrer"
-              >
-                HackTruth GitHub 저장소
-              </a>
-              에서 ZIP 파일을 내려받고 압축을 풉니다.
-            </p>
           </li>
           <li>
             <h3>압축 해제한 확장 프로그램 로드</h3>
@@ -392,9 +392,8 @@ const LandingPage = () => {
             <h3>API Base URL 입력</h3>
             <p>
               확장 프로그램 아이콘을 클릭해 설정 화면을 열고 &ldquo;API Base
-              URL&rdquo; 항목에 팩트 체크
-              API 서버 주소를 입력한 뒤 저장하세요. 입력하지 않으면 팩트 체크
-              요청이 진행되지 않습니다.
+              URL&rdquo; 항목에 팩트 체크 API 서버 주소를 입력한 뒤 저장하세요.
+              입력하지 않으면 팩트 체크 요청이 진행되지 않습니다.
             </p>
           </li>
         </ol>
