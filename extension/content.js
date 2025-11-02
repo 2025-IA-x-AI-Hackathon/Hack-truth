@@ -104,6 +104,7 @@ const showUrlOverlay = (url, platform) => {
   overlay.className = "fact-check-url-overlay";
 
   const platformName = platform === "youtube" ? "YouTube" : "Instagram";
+  const safeUrl = escapeHtml(url);
 
   overlay.innerHTML = `
     <div class="url-overlay-content">
@@ -114,9 +115,15 @@ const showUrlOverlay = (url, platform) => {
       <div class="url-overlay-body">
         <div class="url-display">
           <strong>URL:</strong>
-          <p>${url}</p>
+          <p>${safeUrl}</p>
         </div>
-        <p class="url-overlay-note">이 콘텐츠의 팩트 체크를 진행합니다.</p>
+        <div class="url-overlay-status">
+          <div class="loading-spinner"></div>
+          <div class="url-overlay-status-text">
+            <p class="url-overlay-note">요청한 작업을 처리중입니다.</p>
+            <p class="url-overlay-subnote">팩트 체크 분석을 준비하고 있습니다.</p>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -163,9 +170,7 @@ const requestVideoFactCheck = (url, platform) => {
         return;
       }
 
-      console.log(
-        "========== Video Fact Check Response (Content) =========="
-      );
+      console.log("========== Video Fact Check Response (Content) ==========");
       console.log("Response Body:", JSON.stringify(response, null, 2));
       console.log("=========================================================");
 
@@ -187,7 +192,7 @@ const showFactCheckPopup = (data) => {
   removeExistingPopup();
 
   // 팝업 생성
-  const popup = createPopup(data);
+  const popup = createPopup(data);``
   document.body.appendChild(popup);
   console.log("Popup added to DOM");
 
@@ -284,7 +289,60 @@ const showResultModal = (data) => {
   modal.id = "fact-check-result-modal";
   modal.className = "fact-check-result-modal";
 
-  const { result, rawModelResponse } = data;
+  const result = data?.result || {};
+  const accuracyValue = result?.accuracy || "정보 없음";
+  const accuracyReason = data?.accuracyReason || result?.accuracy_reason || "";
+  const createdAtRaw = data?.createdAt;
+  let createdAt = null;
+  if (createdAtRaw) {
+    const parsedDate = new Date(createdAtRaw);
+    if (!Number.isNaN(parsedDate.valueOf())) {
+      createdAt = parsedDate;
+    }
+  }
+  const shareUrl = data?.shareUrl || "";
+  const inputText = data?.inputText || "";
+
+  const normalizedUrls = Array.isArray(result?.urls)
+    ? result.urls.filter((url) => typeof url === "string" && url.trim())
+    : [];
+
+  const accuracyReasonHtml = accuracyReason
+    ? `<p class="accuracy-reason">${escapeHtml(accuracyReason)}</p>`
+    : "";
+
+  const createdAtHtml = createdAt
+    ? `<p class="result-meta"><strong>분석일</strong><span>${createdAt.toLocaleString()}</span></p>`
+    : "";
+
+  const referencesHtml =
+    normalizedUrls.length > 0
+      ? `
+        <div class="result-section">
+          <h3>참고 레퍼런스</h3>
+          <ul class="reference-list">
+            ${normalizedUrls
+              .map((url) => {
+                const safeUrl = escapeHtml(url);
+                return `<li><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></li>`;
+              })
+              .join("")}
+          </ul>
+        </div>
+      `
+      : "";
+
+  const inputTextHtml = inputText
+    ? `
+        <div class="result-section">
+          <h3>검증한 텍스트</h3>
+          <blockquote class="input-text">${escapeHtml(inputText)}</blockquote>
+        </div>
+      `
+    : "";
+
+  const shareButtonState = shareUrl ? "" : "disabled";
+  const shareButtonLabel = shareUrl ? "결과 공유하기" : "공유 URL 준비중";
 
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
@@ -294,49 +352,83 @@ const showResultModal = (data) => {
         <button class="modal-close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
-        <div class="result-section">
+        <div class="result-section result-section--accuracy">
           <div class="accuracy-badge">
             <span class="accuracy-label">정확도</span>
-            <span class="accuracy-value">${result.accuracy}</span>
+            <span class="accuracy-value">${escapeHtml(accuracyValue)}</span>
           </div>
+          ${accuracyReasonHtml}
+          ${createdAtHtml}
         </div>
-        
+
         <div class="result-section">
           <h3>분석 결과</h3>
-          <p class="reason-text">${result.reason}</p>
+          <p class="reason-text">${escapeHtml(
+            result?.reason || "분석 결과를 불러오지 못했습니다."
+          )}</p>
         </div>
 
-        ${
-          result.urls && result.urls.length > 0
-            ? `
-          <div class="result-section">
-            <h3>참고 레퍼런스</h3>
-            <ul class="reference-list">
-              ${result.urls.map((url) => `<li><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></li>`).join("")}
-            </ul>
-          </div>
-        `
-            : ""
-        }
-
-        ${
-          rawModelResponse
-            ? `
-          <div class="result-section">
-            <h3>상세 분석</h3>
-            <div class="raw-response">
-              <pre>${escapeHtml(rawModelResponse)}</pre>
-            </div>
-          </div>
-        `
-            : ""
-        }
+        ${inputTextHtml}
+        ${referencesHtml}
+      </div>
+      <div class="modal-footer">
+        <button class="share-result-button" type="button" ${shareButtonState}>
+          ${shareButtonLabel}
+        </button>
+        <p class="share-result-hint">${
+          shareUrl
+            ? "버튼을 누르면 공유 URL이 클립보드에 복사됩니다."
+            : "결과 ID를 아직 받지 못해 공유 링크를 만들 수 없습니다."
+        }</p>
+        <p class="share-result-status" aria-live="polite"></p>
       </div>
     </div>
   `;
 
   document.body.appendChild(modal);
   attachModalDismissHandlers(modal);
+
+  const shareButton = modal.querySelector(".share-result-button");
+  const statusLabel = modal.querySelector(".share-result-status");
+
+  if (shareButton && shareUrl) {
+    shareButton.addEventListener("click", async () => {
+      if (!shareUrl) {
+        return;
+      }
+
+      const originalText = shareButton.textContent;
+      try {
+        await copyTextToClipboard(shareUrl);
+        shareButton.textContent = "복사 완료!";
+        shareButton.classList.add("copied");
+        if (statusLabel) {
+          statusLabel.textContent = "공유 링크가 클립보드에 복사되었습니다.";
+          statusLabel.classList.remove("error");
+          statusLabel.classList.add("success");
+        }
+      } catch (error) {
+        console.error("Failed to copy share URL:", error);
+        shareButton.textContent = "복사 실패";
+        shareButton.classList.add("error");
+        if (statusLabel) {
+          statusLabel.textContent =
+            "클립보드 복사에 실패했습니다. 다시 시도해주세요.";
+          statusLabel.classList.add("error");
+          statusLabel.classList.remove("success");
+        }
+      } finally {
+        setTimeout(() => {
+          shareButton.textContent = originalText;
+          shareButton.classList.remove("copied", "error");
+          if (statusLabel) {
+            statusLabel.textContent = "";
+            statusLabel.classList.remove("success", "error");
+          }
+        }, 2500);
+      }
+    });
+  }
 };
 
 // 에러 모달 표시
@@ -410,9 +502,47 @@ const attachModalDismissHandlers = (modal) => {
 
 // HTML 이스케이프 유틸리티
 const escapeHtml = (text) => {
+  if (text === null || text === undefined) {
+    return "";
+  }
+
   const div = document.createElement("div");
-  div.textContent = text;
+  div.textContent = String(text);
   return div.innerHTML;
+};
+
+const copyTextToClipboard = async (text) => {
+  if (!text) {
+    throw new Error("No text provided to copy");
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.top = "-9999px";
+      textarea.setAttribute("readonly", "");
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textarea);
+
+      if (successful) {
+        resolve();
+      } else {
+        reject(new Error("execCommand copy failed"));
+      }
+    } catch (error) {
+      reject(error);
+    }
+  });
 };
 
 // 영상 팩트 체크 결과 모달 표시
@@ -427,18 +557,31 @@ const showVideoResultModal = (data) => {
     data?.platform === "youtube"
       ? "YouTube"
       : data?.platform === "instagram"
-      ? "Instagram"
-      : "Video";
+        ? "Instagram"
+        : "Video";
 
   const summaryText = data?.result
     ? escapeHtml(data.result)
     : "영상 분석 결과를 불러오지 못했습니다.";
 
-  const detailText =
+  const detailRaw =
     data?.rawResponse?.detail ||
     data?.rawResponse?.description ||
     data?.rawResponse?.summary ||
     "";
+
+  const detailContent = detailRaw ? escapeHtml(detailRaw) : null;
+
+  const misinformationRaw =
+    data?.rawResponse?.misinformation_result ||
+    data?.rawResponse?.misinformation ||
+    data?.misinformationResult ||
+    data?.misinformation ||
+    "";
+
+  const misinformationText = misinformationRaw
+    ? escapeHtml(misinformationRaw)
+    : "사실 검증 결과는 준비중입니다.";
 
   const referencesRaw =
     data?.rawResponse?.references ||
@@ -449,8 +592,47 @@ const showVideoResultModal = (data) => {
   const references = Array.isArray(referencesRaw)
     ? referencesRaw
     : typeof referencesRaw === "string" && referencesRaw.length > 0
-    ? [referencesRaw]
-    : [];
+      ? [referencesRaw]
+      : [];
+
+  const requestedUrl =
+    typeof data?.requestedUrl === "string" && data.requestedUrl.length > 0
+      ? escapeHtml(data.requestedUrl)
+      : "";
+
+  const scoreGridHtml = `
+    <div class="video-score-grid">
+      <div class="video-score-card">
+        <span class="score-label">FFT Artifact Score</span>
+        <span class="score-value">${escapeHtml(
+          data?.fftArtifactScore ?? "-"
+        )}</span>
+      </div>
+      <div class="video-score-card">
+        <span class="score-label">Action Pattern Score</span>
+        <span class="score-value">${escapeHtml(
+          data?.actionPatternScore ?? "-"
+        )}</span>
+      </div>
+    </div>
+  `;
+
+  const referencesHtml =
+    references.length > 0
+      ? `
+          <ul class="reference-list">
+            ${references
+              .map((ref) => {
+                if (typeof ref !== "string") {
+                  return "";
+                }
+                const safeRef = escapeHtml(ref);
+                return `<li><a href="${safeRef}" target="_blank" rel="noopener noreferrer">${safeRef}</a></li>`;
+              })
+              .join("")}
+          </ul>
+        `
+      : `<p class="video-result-placeholder">참고 레퍼런스는 준비중입니다.</p>`;
 
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
@@ -460,57 +642,48 @@ const showVideoResultModal = (data) => {
         <button class="modal-close-btn" type="button">✕</button>
       </div>
       <div class="modal-body">
-        <div class="result-section">
-          <h3>결과 요약</h3>
-          <p class="video-result-summary">${summaryText}</p>
-        </div>
+        <p class="video-result-intro">Fact Check 결과는 다음과 같습니다.</p>
 
-        <div class="result-section">
-          <h3>신뢰 지표</h3>
-          <div class="video-score-grid">
-            <div class="video-score-card">
-              <span class="score-label">FFT Artifact Score</span>
-              <span class="score-value">${escapeHtml(
-                data?.fftArtifactScore ?? "-"
-              )}</span>
-            </div>
-            <div class="video-score-card">
-              <span class="score-label">Action Pattern Score</span>
-              <span class="score-value">${escapeHtml(
-                data?.actionPatternScore ?? "-"
-              )}</span>
-            </div>
+        ${
+          requestedUrl
+            ? `
+        <div class="video-url-pill">
+          <span class="video-url-label">분석한 영상</span>
+          <span class="video-url-value">${requestedUrl}</span>
+        </div>
+        `
+            : ""
+        }
+
+        <div class="video-result-item">
+          <div class="video-result-badge">1</div>
+          <div class="video-result-item-body">
+            <h3>생성형 AI 요소 여부</h3>
+            <p class="video-result-summary">${summaryText}</p>
+            ${scoreGridHtml}
           </div>
         </div>
 
-        ${
-          detailText
-            ? `
-        <div class="result-section">
-          <h3>상세 설명</h3>
-          <p class="video-detail-text">${escapeHtml(detailText)}</p>
+        <div class="video-result-item">
+          <div class="video-result-badge">2</div>
+          <div class="video-result-item-body">
+            <h3>사실 검증</h3>
+            <p class="video-result-misinformation">${misinformationText}</p>
+          </div>
         </div>
-        `
-            : ""
-        }
 
-        ${
-          references.length > 0
-            ? `
-        <div class="result-section">
-          <h3>참고 레퍼런스</h3>
-          <ul class="reference-list">
-            ${references
-              .map(
-                (ref) =>
-                  `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`
-              )
-              .join("")}
-          </ul>
+        <div class="video-result-item">
+          <div class="video-result-badge">3</div>
+          <div class="video-result-item-body">
+            <h3>상세 설명 & 레퍼런스</h3>
+            ${
+              detailContent
+                ? `<p class="video-detail-text">${detailContent}</p>`
+                : `<p class="video-result-placeholder">상세 설명은 준비중입니다.</p>`
+            }
+            ${referencesHtml}
+          </div>
         </div>
-        `
-            : ""
-        }
       </div>
     </div>
   `;
@@ -528,26 +701,29 @@ const showImageResultModal = (data) => {
   modal.className = "fact-check-result-modal image";
 
   const result = data?.result || {};
-  const success = !!result.success;
-  const verdictText = result.verdict
-    ? result.verdict
-    : success
-    ? "판단 결과를 가져오지 못했습니다."
-    : "분석이 완료되지 않았습니다.";
+  const rawModelResponse =
+    typeof data?.rawModelResponse === "string" ? data.rawModelResponse : null;
 
-  const summaryText = success
-    ? `이 이미지는 ${verdictText}`
-    : result.error
-    ? `분석에 실패했습니다: ${result.error}`
-    : "이미지 분석 결과를 불러오지 못했습니다.";
+  const rawFakeValue =
+    typeof result.fake === "string" ? result.fake.trim() : "";
+  const fakeDisplay = rawFakeValue || "알 수 없음";
+  const normalizedFake = rawFakeValue.toLowerCase();
 
-  const confidenceValue =
-    typeof result.confidence === "number" ? `${result.confidence}%` : "-";
-  const fakeProbValue =
-    typeof result.fake_prob === "number" ? `${result.fake_prob}%` : "-";
-  const realProbValue =
-    typeof result.real_prob === "number" ? `${result.real_prob}%` : "-";
-  const modelName = result.model_name || "모델 정보 없음";
+  let defaultSummary;
+  if (["true", "fake", "yes"].includes(normalizedFake)) {
+    defaultSummary = "이 이미지는 딥페이크로 의심됩니다.";
+  } else if (["false", "real", "no"].includes(normalizedFake)) {
+    defaultSummary = "이 이미지는 진짜로 판별되었습니다.";
+  } else if (rawFakeValue) {
+    defaultSummary = `모델이 '${rawFakeValue}' 상태로 판정했습니다.`;
+  } else {
+    defaultSummary = "이미지 판별 결과를 확인할 수 없습니다.";
+  }
+
+  const reasonText =
+    typeof result.reason === "string" && result.reason.trim().length > 0
+      ? result.reason.trim()
+      : defaultSummary;
 
   modal.innerHTML = `
     <div class="modal-backdrop"></div>
@@ -573,39 +749,26 @@ const showImageResultModal = (data) => {
         }
 
         <div class="result-section">
-          <h3>분석 요약</h3>
-          <p class="image-result-summary">${escapeHtml(summaryText)}</p>
-        </div>
-
-        <div class="result-section">
-          <h3>판단 지표</h3>
+          <h3>모델 판정</h3>
           <div class="image-score-grid">
             <div class="image-score-card">
-              <span class="score-label">Confidence</span>
-              <span class="score-value">${escapeHtml(confidenceValue)}</span>
-            </div>
-            <div class="image-score-card">
-              <span class="score-label">Fake Prob</span>
-              <span class="score-value">${escapeHtml(fakeProbValue)}</span>
-            </div>
-            <div class="image-score-card">
-              <span class="score-label">Real Prob</span>
-              <span class="score-value">${escapeHtml(realProbValue)}</span>
+              <span class="score-label">Fake 여부</span>
+              <span class="score-value">${escapeHtml(fakeDisplay)}</span>
             </div>
           </div>
         </div>
 
         <div class="result-section">
-          <h3>모델 정보</h3>
-          <p class="image-model-name">${escapeHtml(modelName)}</p>
+          <h3>분석 요약</h3>
+          <p class="image-result-summary">${escapeHtml(reasonText)}</p>
         </div>
 
         ${
-          !success && result.error
+          rawModelResponse
             ? `
         <div class="result-section">
-          <h3>오류 상세</h3>
-          <p class="image-error-text">${escapeHtml(result.error)}</p>
+          <h3>Raw Model Response</h3>
+          <pre class="image-raw-response">${escapeHtml(rawModelResponse)}</pre>
         </div>
         `
             : ""
@@ -643,7 +806,7 @@ const applyBackgroundDetectionSetting = (enabled) => {
   } else {
     console.log("Background detection enabled via settings");
     hasCheckedCurrentPage = false;
-    scheduleAutoFactCheck(500);
+    scheduleAutoFactCheck(2000);
   }
 };
 
@@ -690,17 +853,20 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
 
-  if (Object.prototype.hasOwnProperty.call(changes, "isBackgroundDetectionEnabled")) {
+  if (
+    Object.prototype.hasOwnProperty.call(
+      changes,
+      "isBackgroundDetectionEnabled"
+    )
+  ) {
     const newValue = changes.isBackgroundDetectionEnabled.newValue;
-    const enabled =
-      typeof newValue === "boolean" ? newValue : true;
+    const enabled = typeof newValue === "boolean" ? newValue : true;
     applyBackgroundDetectionSetting(enabled);
   }
 
   if (Object.prototype.hasOwnProperty.call(changes, "isFactCheckEnabled")) {
     const newValue = changes.isFactCheckEnabled.newValue;
-    const enabled =
-      typeof newValue === "boolean" ? newValue : true;
+    const enabled = typeof newValue === "boolean" ? newValue : true;
     applyGlobalFactCheckSetting(enabled);
   }
 });
@@ -793,7 +959,12 @@ const requestAutoFactCheck = () => {
         return;
       }
 
-      if (response && response.success && response.data && response.data.skipped) {
+      if (
+        response &&
+        response.success &&
+        response.data &&
+        response.data.skipped
+      ) {
         console.log("Auto fact check skipped:", response.data);
       }
     }
@@ -816,8 +987,7 @@ const showWarningOverlay = (isCurrentPage, url) => {
     <div class="warning-content">
       <div class="warning-icon">⚠️</div>
       <div class="warning-message">
-        <strong>Fact check 결과 거짓 정보가 포함되어있을 수 있습니다. 유의해주세요</strong>
-        <p class="warning-page-info">${pageInfo}</p>
+        <strong>유의해주세요. <br/>Fact check 결과 거짓 정보가 포함되어있을 수 있습니다.</strong>
       </div>
       <button class="warning-close-btn" id="closeWarningOverlay">✕</button>
     </div>
@@ -945,12 +1115,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     showResultModal(request.data);
   } else if (request.type === "SHOW_ERROR") {
     hideLoadingOverlay();
+    removeUrlOverlay();
+    showPageButtonAgain();
     showErrorModal(request.data);
   } else if (request.type === "SHOW_WARNING_OVERLAY") {
     const { isCurrentPage, url } = request.data;
     showWarningOverlay(isCurrentPage, url);
   } else if (request.type === "SHOW_API_URL_WARNING") {
     hideLoadingOverlay();
+    removeUrlOverlay();
+    showPageButtonAgain();
     showApiUrlWarningOverlay(request.data.message);
   } else if (request.type === "SHOW_IMAGE_RESULT_MODAL") {
     hideLoadingOverlay();
